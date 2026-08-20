@@ -32,6 +32,15 @@ export interface MapFeature {
   /** Center point, in MAP_VIEWBOX units, of the feature's largest single piece — where the
    * tiny-country marker gets placed. Meaningless (but harmless) when `isTiny` is false. */
   centroid: [number, number];
+  /** How far (in MAP_VIEWBOX units) from `centroid` a tap should still count as hitting this
+   * marker — a forgiving hit area for real fingers, well beyond the marker's visible dot.
+   * Adaptive per-country rather than one flat radius: some tiny countries sit right next to
+   * other tiny countries (Vatican City and San Marino are ~6 units apart; several Caribbean
+   * island nations are under 3 units apart), so a generous fixed radius would make taps near
+   * one resolve to its neighbor instead. Capped at half the distance to the nearest other tiny
+   * country so two markers' hit areas never swallow each other. Meaningless when `isTiny` is
+   * false. */
+  tapRadius: number;
 }
 
 /** Fixed drawing surface every feature's path is computed against — matches the SVG's own
@@ -45,6 +54,16 @@ export const MAP_VIEWBOX = { width: 960, height: 500 };
  * excluding ordinary small-but-visible countries like Luxembourg (~2.2 units) — there's a clear
  * gap in the real distribution right around here, not an arbitrary round number. */
 const TINY_PRIMARY_DIMENSION = 2.2;
+
+/** Bounds on the adaptive tap radius (see MapFeature.tapRadius): never so small it's not
+ * actually more forgiving than the visible dot, never so large that an isolated tiny country
+ * (nothing else tiny anywhere nearby — Liechtenstein's nearest tiny neighbor, Vatican City, is
+ * ~18 units away) grabs an unreasonably large chunk of the map. */
+const MIN_TAP_RADIUS = 3;
+const MAX_TAP_RADIUS = 10;
+/** Small gap kept between two neighboring tap circles at their half-distance split, so they
+ * never exactly touch (avoids a razor's-edge boundary where the two are indistinguishable). */
+const TAP_RADIUS_MARGIN = 0.5;
 
 function slugify(name: string): string {
   return name
@@ -152,20 +171,42 @@ async function loadMapFeatures(): Promise<MapFeature[]> {
     maxDimensionById.set(r.id, Math.max(maxDimensionById.get(r.id) ?? 0, dimension));
   }
 
-  return raw.map((r): MapFeature => {
+  const withCentroids = raw.map((r) => {
     const groupDimension = maxDimensionById.get(r.id) ?? Infinity;
     const centroid: [number, number] = r.primaryBounds
       ? [(r.primaryBounds[0] + r.primaryBounds[2]) / 2, (r.primaryBounds[1] + r.primaryBounds[3]) / 2]
       : [0, 0];
-    return {
-      id: r.id,
-      name: r.name,
-      quizzable: r.quizzable,
-      path: r.path,
-      isTiny: r.quizzable && groupDimension < TINY_PRIMARY_DIMENSION,
-      centroid,
-    };
+    return { ...r, centroid, isTiny: r.quizzable && groupDimension < TINY_PRIMARY_DIMENSION };
   });
+
+  // Adaptive tap radius: for each tiny country, find the nearest OTHER tiny country's centroid
+  // and cap this one's hit radius at half that distance (minus a small margin), so two nearby
+  // markers' tap areas never overlap and steal each other's taps. Only ~30 countries end up
+  // tiny, so this O(n²) pass over just that subset is trivial.
+  const tinyCentroids = withCentroids.filter((f) => f.isTiny).map((f) => ({ id: f.id, centroid: f.centroid }));
+  function tapRadiusFor(id: string, centroid: [number, number]): number {
+    let nearestDistance = Infinity;
+    for (const other of tinyCentroids) {
+      if (other.id === id) continue;
+      const dx = other.centroid[0] - centroid[0];
+      const dy = other.centroid[1] - centroid[1];
+      nearestDistance = Math.min(nearestDistance, Math.hypot(dx, dy));
+    }
+    const halfGap = nearestDistance / 2 - TAP_RADIUS_MARGIN;
+    return Math.min(MAX_TAP_RADIUS, Math.max(MIN_TAP_RADIUS, halfGap));
+  }
+
+  return withCentroids.map(
+    (f): MapFeature => ({
+      id: f.id,
+      name: f.name,
+      quizzable: f.quizzable,
+      path: f.path,
+      isTiny: f.isTiny,
+      centroid: f.centroid,
+      tapRadius: f.isTiny ? tapRadiusFor(f.id, f.centroid) : 0,
+    }),
+  );
 }
 
 /** Fetches + projects the map once and caches the result for the lifetime of the page — every

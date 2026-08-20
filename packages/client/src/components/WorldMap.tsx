@@ -81,9 +81,18 @@ export function WorldMap({ fillFor, onCountryTap, className }: WorldMapProps) {
           {features.map((f, i) =>
             f.isTiny ? (
               <g key={`tiny-${i}`} transform={`translate(${f.centroid[0]} ${f.centroid[1]}) scale(${1 / transform.scale})`}>
+                {/* An invisible, much more forgiving tap target layered under the visible dot —
+                    at this scale a real fingertip is far wider than the dot itself, so hit-
+                    testing only the visible circle meant a near-miss would fall through to
+                    whatever bigger country happens to be underneath instead. Radius is per-
+                    country (see geo.ts's tapRadius) so two tiny countries near each other (e.g.
+                    Vatican City/San Marino, or the Caribbean island states) don't steal each
+                    other's taps. pointerEvents="all" makes this catch taps despite having no
+                    visible fill. */}
+                <circle data-feature-index={i} r={f.tapRadius} fill="transparent" pointerEvents="all" />
                 <circle
                   data-feature-index={i}
-                  r={4}
+                  r={5}
                   fill={fillFor(f)}
                   className={f.quizzable ? 'world-map__tiny-marker' : 'world-map__tiny-marker world-map__tiny-marker--bg'}
                 />

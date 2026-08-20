@@ -15,6 +15,10 @@
   --map-correct: #4caf7d;
   --map-wrong: #d64545;
   --map-answered: #3f7a72;
+  /* A muted red for countries you've already gotten wrong this session — deliberately duller
+     than --map-wrong, which is reserved for the brief flash right after you answer, so a
+     glance at the map can tell "missed a while ago" from "just missed this second". */
+  --map-missed: #8a4040;
 
   --mastery-new: #3a5a78;
   --mastery-struggling: #d64545;

@@ -20,7 +20,13 @@ export function QuizScreen({ session, onAnswer, onSkip, onQuit }: QuizScreenProp
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [typedAnswer, setTypedAnswer] = useState('');
   const seenResultCount = useRef(0);
-  const askedIdSet = useMemo(() => new Set(session.askedIds), [session.askedIds]);
+  // Correctness per already-answered country this session — each country is asked at most
+  // once, so this is a plain 1:1 map, not a running tally.
+  const resultByCountry = useMemo(() => {
+    const m = new Map<string, boolean>();
+    for (const r of session.results) m.set(r.countryId, r.correct);
+    return m;
+  }, [session.results]);
 
   // A new result landed (either mode) — flash brief correct/wrong feedback, then let it fade.
   // The underlying question has already advanced by the time this fires; the feedback is just
@@ -56,7 +62,9 @@ export function QuizScreen({ session, onAnswer, onSkip, onQuit }: QuizScreenProp
     if (session.config.mode === 'typeIt' && current && feature.id === current.country.id) {
       return 'var(--map-target)';
     }
-    if (askedIdSet.has(feature.id)) return 'var(--map-answered)';
+    const priorResult = resultByCountry.get(feature.id);
+    if (priorResult === true) return 'var(--map-answered)';
+    if (priorResult === false) return 'var(--map-missed)';
     return 'var(--map-land)';
   }
 
