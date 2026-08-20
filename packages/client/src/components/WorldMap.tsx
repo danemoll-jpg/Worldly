@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { getMapFeatures, MAP_VIEWBOX, MapFeature } from '../lib/geo';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { getInsets, getMapFeatures, Inset, MAP_VIEWBOX, MapFeature } from '../lib/geo';
 import { usePanZoom } from '../lib/panZoom';
 
 interface WorldMapProps {
@@ -9,10 +9,17 @@ interface WorldMapProps {
   fillFor: (feature: MapFeature) => string;
   /** Fires for a genuine tap/click (not the tail end of a pan or pinch) on any shape —
    * including background-only territories; the caller decides whether to act on
-   * `feature.quizzable`. */
+   * `feature.quizzable`. Also fires for taps inside an inset box (see geo.ts's INSET_GROUPS). */
   onCountryTap?: (feature: MapFeature) => void;
   className?: string;
 }
+
+/** Fixed corner for each inset box, in CSS terms — keyed by inset id so it's obvious at a
+ * glance which box goes where without hunting through JSX. */
+const INSET_POSITION: Record<string, 'top-left' | 'top-right'> = {
+  'europe-microstates': 'top-left',
+  'caribbean-states': 'top-right',
+};
 
 /** The core reusable map surface — flat, pannable, zoomable (mouse wheel, drag, or two-finger
  * pinch/pan on touch), shared by the quiz screens and the mastery map. Doesn't know anything
@@ -22,16 +29,26 @@ interface WorldMapProps {
 export function WorldMap({ fillFor, onCountryTap, className }: WorldMapProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [features, setFeatures] = useState<MapFeature[] | null>(null);
+  const [insets, setInsets] = useState<Inset[]>([]);
 
   useEffect(() => {
     let cancelled = false;
     getMapFeatures().then((loaded) => {
       if (!cancelled) setFeatures(loaded);
     });
+    getInsets().then((loaded) => {
+      if (!cancelled) setInsets(loaded);
+    });
     return () => {
       cancelled = true;
     };
   }, []);
+
+  const featureById = useMemo(() => {
+    const m = new Map<string, MapFeature>();
+    for (const f of features ?? []) m.set(f.id, f);
+    return m;
+  }, [features]);
 
   function handleTap(target: Element | null) {
     if (!target || !onCountryTap || !features) return;
@@ -72,23 +89,22 @@ export function WorldMap({ fillFor, onCountryTap, className }: WorldMapProps) {
               className={f.quizzable ? 'world-map__country' : 'world-map__country world-map__country--bg'}
             />
           ))}
-          {/* Tiny countries (Vatican City, Liechtenstein, Monaco, ...) render as slivers or
-              single points at any practical zoom level — a real path click target for them
-              would be sub-pixel. Instead, drop a small dot at each one's centroid and counter-
+          {/* Tiny, geographically isolated countries (Nauru, Malta, Tuvalu, ...) render as
+              slivers or single points at any practical zoom level — a real path click target
+              for them would be sub-pixel. Drop a small dot at each one's centroid and counter-
               scale it by 1/transform.scale so it stays a constant, always-tappable size on
-              screen regardless of zoom, layered on top so it's never hidden by a larger
-              neighbor's fill. */}
+              screen regardless of zoom. Tiny countries that sit close to OTHER tiny countries
+              (Vatican City/San Marino, the Caribbean cluster) skip this entirely — insetGroupId
+              is set for those, and they're found via the inset boxes below instead, since no
+              marker radius on the main map could tell them apart from their neighbors. */}
           {features.map((f, i) =>
-            f.isTiny ? (
+            f.isTiny && !f.insetGroupId ? (
               <g key={`tiny-${i}`} transform={`translate(${f.centroid[0]} ${f.centroid[1]}) scale(${1 / transform.scale})`}>
                 {/* An invisible, much more forgiving tap target layered under the visible dot —
                     at this scale a real fingertip is far wider than the dot itself, so hit-
                     testing only the visible circle meant a near-miss would fall through to
-                    whatever bigger country happens to be underneath instead. Radius is per-
-                    country (see geo.ts's tapRadius) so two tiny countries near each other (e.g.
-                    Vatican City/San Marino, or the Caribbean island states) don't steal each
-                    other's taps. pointerEvents="all" makes this catch taps despite having no
-                    visible fill. */}
+                    whatever bigger country happens to be underneath instead. pointerEvents="all"
+                    makes this catch taps despite having no visible fill. */}
                 <circle data-feature-index={i} r={f.tapRadius} fill="transparent" pointerEvents="all" />
                 <circle
                   data-feature-index={i}
@@ -101,6 +117,44 @@ export function WorldMap({ fillFor, onCountryTap, className }: WorldMapProps) {
           )}
         </g>
       </svg>
+
+      {/* Inset boxes: separate, non-zoomable mini-maps for clusters of tiny countries too close
+          together for any marker radius to tell apart on the main map (see geo.ts's
+          INSET_GROUPS) — the same fix atlases use for exactly this problem. Each country draws
+          as a fixed-size dot at its real relative position rather than a to-scale outline —
+          these clusters have huge internal size gaps too (Andorra vs. Vatican City), so even a
+          zoomed-in to-scale shape would leave the smallest members sub-pixel again. */}
+      {insets.map((inset) => {
+        const position = INSET_POSITION[inset.id] ?? 'top-left';
+        return (
+          <div
+            key={inset.id}
+            className={`world-map__inset world-map__inset--${position}`}
+            style={{ aspectRatio: `${inset.viewBox.width} / ${inset.viewBox.height}` }}
+          >
+            <div className="world-map__inset-label">{inset.label}</div>
+            <svg viewBox={`0 0 ${inset.viewBox.width} ${inset.viewBox.height}`} className="world-map__inset-svg">
+              {inset.features.map((insetFeature) => {
+                const mainFeature = featureById.get(insetFeature.id);
+                if (!mainFeature) return null;
+                return (
+                  <circle
+                    key={insetFeature.id}
+                    data-country-id={insetFeature.id}
+                    cx={insetFeature.cx}
+                    cy={insetFeature.cy}
+                    r={7}
+                    fill={fillFor(mainFeature)}
+                    className="world-map__inset-country"
+                    onClick={() => onCountryTap?.(mainFeature)}
+                  />
+                );
+              })}
+            </svg>
+          </div>
+        );
+      })}
+
       <button type="button" className="world-map__reset" onClick={reset} title="Reset pan/zoom">
         ⟲
       </button>

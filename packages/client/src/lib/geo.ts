@@ -25,22 +25,27 @@ export interface MapFeature {
    * rendering needs to know this came from lat/lon coordinates at all. */
   path: string;
   /** True for countries whose real shape is impractical to see or reliably tap at typical zoom
-   * levels (Vatican City, Liechtenstein, Monaco, Nauru, ...) — WorldMap draws a small,
-   * constant-screen-size marker on top of these so they're always findable regardless of zoom,
-   * rather than relying on the (sometimes sub-pixel) actual path. */
+   * levels (Vatican City, Liechtenstein, Monaco, Nauru, ...). When `insetGroupId` is null,
+   * WorldMap draws a small, constant-screen-size marker on top of these so they're always
+   * findable regardless of zoom; when it's set, the inset box is the intended way to find this
+   * country instead (see `insetGroupId`). */
   isTiny: boolean;
   /** Center point, in MAP_VIEWBOX units, of the feature's largest single piece — where the
    * tiny-country marker gets placed. Meaningless (but harmless) when `isTiny` is false. */
   centroid: [number, number];
   /** How far (in MAP_VIEWBOX units) from `centroid` a tap should still count as hitting this
    * marker — a forgiving hit area for real fingers, well beyond the marker's visible dot.
-   * Adaptive per-country rather than one flat radius: some tiny countries sit right next to
-   * other tiny countries (Vatican City and San Marino are ~6 units apart; several Caribbean
-   * island nations are under 3 units apart), so a generous fixed radius would make taps near
-   * one resolve to its neighbor instead. Capped at half the distance to the nearest other tiny
+   * Adaptive per-country: capped at half the distance to the nearest other marker-rendering tiny
    * country so two markers' hit areas never swallow each other. Meaningless when `isTiny` is
-   * false. */
+   * false or `insetGroupId` is set (that country has no marker on the main map at all). */
   tapRadius: number;
+  /** Set for tiny countries that sit close enough to OTHER tiny countries that no marker radius
+   * can disambiguate a tap between them on the main map at all (Vatican City is only ~6 units
+   * from San Marino; several Caribbean island states are under 3 units apart from each other —
+   * for scale, the whole map is 960 units wide). These render with no marker on the main map;
+   * instead WorldMap draws a small separate zoomed-in inset box (id/label from INSET_GROUPS)
+   * where the same countries have real, comfortably-sized, unambiguous tap targets. */
+  insetGroupId: string | null;
 }
 
 /** Fixed drawing surface every feature's path is computed against — matches the SVG's own
@@ -55,15 +60,56 @@ export const MAP_VIEWBOX = { width: 960, height: 500 };
  * gap in the real distribution right around here, not an arbitrary round number. */
 const TINY_PRIMARY_DIMENSION = 2.2;
 
-/** Bounds on the adaptive tap radius (see MapFeature.tapRadius): never so small it's not
- * actually more forgiving than the visible dot, never so large that an isolated tiny country
- * (nothing else tiny anywhere nearby — Liechtenstein's nearest tiny neighbor, Vatican City, is
- * ~18 units away) grabs an unreasonably large chunk of the map. */
-const MIN_TAP_RADIUS = 3;
-const MAX_TAP_RADIUS = 10;
+/** Bounds on the adaptive tap radius (see MapFeature.tapRadius): MIN is deliberately bigger
+ * than the marker's own visible-dot radius (see WorldMap.tsx) — a hit radius smaller than the
+ * dot itself would add nothing, since the dot already sits on top and catches those taps. MAX
+ * keeps an isolated tiny country (nothing else tiny anywhere nearby) from grabbing an
+ * unreasonably large chunk of the map. */
+const MIN_TAP_RADIUS = 7;
+const MAX_TAP_RADIUS = 12;
 /** Small gap kept between two neighboring tap circles at their half-distance split, so they
  * never exactly touch (avoids a razor's-edge boundary where the two are indistinguishable). */
 const TAP_RADIUS_MARGIN = 0.5;
+
+/** Clusters of tiny countries close enough together that no marker radius can tell taps apart
+ * between them on the main map — each gets its own small, zoomed-in inset box instead (see
+ * WorldMap.tsx), the same fix atlases and other geography references use for exactly this
+ * problem. `viewBox` is deliberately shaped to each cluster's real aspect ratio (the Caribbean
+ * chain runs north-south; the European microstates run east-west), not a generic square. */
+export const INSET_GROUPS: { id: string; label: string; countryIds: string[]; viewBox: { width: number; height: number } }[] = [
+  {
+    id: 'europe-microstates',
+    label: 'Europe microstates',
+    countryIds: ['438', '336', '674', '492', '020'], // Liechtenstein, Vatican City, San Marino, Monaco, Andorra
+    viewBox: { width: 200, height: 100 },
+  },
+  {
+    id: 'caribbean-states',
+    label: 'Eastern Caribbean',
+    countryIds: ['028', '052', '212', '308', '662', '659', '670'], // Antigua & Barbuda, Barbados, Dominica, Grenada, Saint Lucia, St Kitts & Nevis, St Vincent & the Grenadines
+    viewBox: { width: 110, height: 180 },
+  },
+];
+
+const INSET_GROUP_BY_COUNTRY_ID = new Map<string, string>(INSET_GROUPS.flatMap((g) => g.countryIds.map((id) => [id, g.id] as const)));
+
+/** Margin (in the inset's own viewBox units) kept between the fitted shapes and the box edge. */
+const INSET_MARGIN = 14;
+
+export interface InsetFeature {
+  id: string;
+  /** Position, in the inset's own viewBox units, to draw a fixed-size dot at — NOT a to-scale
+   * outline (see buildInset's comment for why). */
+  cx: number;
+  cy: number;
+}
+
+export interface Inset {
+  id: string;
+  label: string;
+  viewBox: { width: number; height: number };
+  features: InsetFeature[];
+}
 
 function slugify(name: string): string {
   return name
@@ -124,9 +170,48 @@ function projectFeature(f: any, pathGenerator: ReturnType<typeof geoPath>): Proj
   return { path: pieces.join(' '), primaryBounds: primary?.bounds ?? null };
 }
 
-let cachedPromise: Promise<MapFeature[]> | null = null;
+/** Builds one inset: a small projection fitted to this cluster's own countries, positioning
+ * each one accurately relative to the others — but drawn as a fixed-size dot, NOT its real
+ * to-scale outline. The clusters this exists for have huge internal size disparity (Andorra is
+ * roughly 1000x the area of Vatican City) — fitting a shared scale to the whole group still
+ * leaves the smallest members sub-pixel, so scaling up doesn't actually solve the problem it's
+ * meant to solve. Real-position dots sidestep that entirely: every member gets an equally
+ * tappable target regardless of its true size, while still sitting in roughly the right spot
+ * relative to its neighbors. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function buildInset(group: (typeof INSET_GROUPS)[number], geojson: any): Inset {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const groupFeatures = geojson.features.filter((f: any) => group.countryIds.includes(f.id));
+  const fc = { type: 'FeatureCollection' as const, features: groupFeatures };
+  const { width, height } = group.viewBox;
+  const projection = geoNaturalEarth1().fitExtent(
+    [
+      [INSET_MARGIN, INSET_MARGIN],
+      [width - INSET_MARGIN, height - INSET_MARGIN],
+    ],
+    fc,
+  );
+  const pathGenerator = geoPath(projection);
+  return {
+    id: group.id,
+    label: group.label,
+    viewBox: group.viewBox,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    features: groupFeatures.map((f: any) => {
+      const [cx, cy] = pathGenerator.centroid(f);
+      return { id: f.id as string, cx, cy };
+    }),
+  };
+}
 
-async function loadMapFeatures(): Promise<MapFeature[]> {
+interface MapData {
+  features: MapFeature[];
+  insets: Inset[];
+}
+
+let cachedPromise: Promise<MapData> | null = null;
+
+async function loadMapData(): Promise<MapData> {
   const response = await fetch(`${import.meta.env.BASE_URL}data/countries-10m.json`);
   if (!response.ok) throw new Error(`Failed to load map data (${response.status})`);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -179,14 +264,17 @@ async function loadMapFeatures(): Promise<MapFeature[]> {
     return { ...r, centroid, isTiny: r.quizzable && groupDimension < TINY_PRIMARY_DIMENSION };
   });
 
-  // Adaptive tap radius: for each tiny country, find the nearest OTHER tiny country's centroid
-  // and cap this one's hit radius at half that distance (minus a small margin), so two nearby
-  // markers' tap areas never overlap and steal each other's taps. Only ~30 countries end up
-  // tiny, so this O(n²) pass over just that subset is trivial.
-  const tinyCentroids = withCentroids.filter((f) => f.isTiny).map((f) => ({ id: f.id, centroid: f.centroid }));
+  // Adaptive tap radius: for each tiny country that still gets a marker on the main map (i.e.
+  // NOT covered by an inset — those have no marker at all, see INSET_GROUPS), find the nearest
+  // OTHER marker-rendering tiny country and cap this one's hit radius at half that distance
+  // (minus a small margin), so two nearby markers' tap areas never overlap and steal each
+  // other's taps. Only a couple dozen countries end up tiny, so this O(n²) pass is trivial.
+  const markerCentroids = withCentroids
+    .filter((f) => f.isTiny && !INSET_GROUP_BY_COUNTRY_ID.has(f.id))
+    .map((f) => ({ id: f.id, centroid: f.centroid }));
   function tapRadiusFor(id: string, centroid: [number, number]): number {
     let nearestDistance = Infinity;
-    for (const other of tinyCentroids) {
+    for (const other of markerCentroids) {
       if (other.id === id) continue;
       const dx = other.centroid[0] - centroid[0];
       const dy = other.centroid[1] - centroid[1];
@@ -196,22 +284,38 @@ async function loadMapFeatures(): Promise<MapFeature[]> {
     return Math.min(MAX_TAP_RADIUS, Math.max(MIN_TAP_RADIUS, halfGap));
   }
 
-  return withCentroids.map(
-    (f): MapFeature => ({
+  const features = withCentroids.map((f): MapFeature => {
+    const insetGroupId = INSET_GROUP_BY_COUNTRY_ID.get(f.id) ?? null;
+    return {
       id: f.id,
       name: f.name,
       quizzable: f.quizzable,
       path: f.path,
       isTiny: f.isTiny,
       centroid: f.centroid,
-      tapRadius: f.isTiny ? tapRadiusFor(f.id, f.centroid) : 0,
-    }),
-  );
+      tapRadius: f.isTiny && !insetGroupId ? tapRadiusFor(f.id, f.centroid) : 0,
+      insetGroupId,
+    };
+  });
+
+  const insets = INSET_GROUPS.map((group) => buildInset(group, geojson));
+
+  return { features, insets };
+}
+
+function loadMapDataCached(): Promise<MapData> {
+  if (!cachedPromise) cachedPromise = loadMapData();
+  return cachedPromise;
 }
 
 /** Fetches + projects the map once and caches the result for the lifetime of the page — every
  * caller (quiz, lookup, mastery map) shares the same promise instead of re-fetching. */
 export function getMapFeatures(): Promise<MapFeature[]> {
-  if (!cachedPromise) cachedPromise = loadMapFeatures();
-  return cachedPromise;
+  return loadMapDataCached().then((d) => d.features);
+}
+
+/** The small zoomed-in cluster boxes (see INSET_GROUPS) — shares the same cached load as
+ * getMapFeatures, just a different slice of the result. */
+export function getInsets(): Promise<Inset[]> {
+  return loadMapDataCached().then((d) => d.insets);
 }

@@ -13,10 +13,13 @@ Includes:
   mouse wheel or a two-finger pinch (works on touch devices, including iPad), reset-view
   button. Country boundaries are public-domain data (Natural Earth, via the `world-atlas`
   package), not anything scraped or licensed.
-- **Tiny countries stay findable.** Vatican City, Liechtenstein, Monaco, San Marino, and a
-  couple dozen others are physically too small to reliably see or tap as their real shape at
-  any practical zoom — each gets a small marker dot at its centroid instead, a constant size on
-  screen no matter how far you're zoomed, so you're never hunting for an invisible sliver.
+- **Tiny countries stay findable.** Most (Nauru, Malta, Tuvalu, and a couple dozen others) get
+  a small marker dot at their centroid instead of relying on their sub-pixel real shape — a
+  constant size on screen no matter how far you're zoomed. A handful sit too close to OTHER
+  tiny countries for any dot to disambiguate (Vatican City is a couple hundred km from San
+  Marino; several Eastern Caribbean island states are even closer) — those get pulled into a
+  small zoomed-in **inset box** in a corner of the map instead, the same fix real atlases use
+  for exactly this problem, so tapping "right on top of" one never resolves to its neighbor.
 - **Two quiz modes**: "find it" (you're told a country's name, tap it on the map) and "type
   it" (a country's highlighted, you type its name — untimed, and lenient about typos and
   alternate names like "USA" or "Czechia" vs. "Czech Republic").
