@@ -1,0 +1,113 @@
+import { useEffect, useRef, useState } from 'react';
+import { Answer, COUNTRY_BY_ID, QuizAnswerResult, QuizSessionState } from '@worldly/engine';
+import { MapFeature } from '../lib/geo';
+import { WorldMap } from './WorldMap';
+
+interface QuizScreenProps {
+  session: QuizSessionState;
+  onAnswer: (answer: Answer) => void;
+  onQuit: () => void;
+}
+
+interface Feedback {
+  result: QuizAnswerResult;
+}
+
+const FEEDBACK_DISPLAY_MS = 1200;
+
+export function QuizScreen({ session, onAnswer, onQuit }: QuizScreenProps) {
+  const [feedback, setFeedback] = useState<Feedback | null>(null);
+  const [typedAnswer, setTypedAnswer] = useState('');
+  const seenResultCount = useRef(0);
+
+  // A new result landed (either mode) — flash brief correct/wrong feedback, then let it fade.
+  // The underlying question has already advanced by the time this fires; the feedback is just
+  // a transient overlay on top, not something that blocks or delays progress.
+  useEffect(() => {
+    if (session.results.length > seenResultCount.current) {
+      const result = session.results[session.results.length - 1];
+      seenResultCount.current = session.results.length;
+      setFeedback({ result });
+      setTypedAnswer('');
+      const timer = setTimeout(() => setFeedback(null), FEEDBACK_DISPLAY_MS);
+      return () => clearTimeout(timer);
+    }
+    seenResultCount.current = session.results.length;
+  }, [session.results]);
+
+  const current = session.current;
+  const totalInSession = session.pool.length;
+  const questionNumber = session.askedIds.length + (current ? 1 : 0);
+
+  function fillFor(feature: MapFeature): string {
+    if (!feature.quizzable) return 'var(--map-bg)';
+    if (feedback && feature.id === feedback.result.countryId) {
+      return feedback.result.correct ? 'var(--map-correct)' : 'var(--map-wrong)';
+    }
+    if (session.config.mode === 'typeIt' && current && feature.id === current.country.id) {
+      return 'var(--map-target)';
+    }
+    return 'var(--map-land)';
+  }
+
+  function handleMapTap(feature: MapFeature) {
+    if (!current || session.config.mode !== 'findIt' || !feature.quizzable || feedback) return;
+    onAnswer({ type: 'findIt', clickedCountryId: feature.id });
+  }
+
+  function handleTypeSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!current || feedback || !typedAnswer.trim()) return;
+    onAnswer({ type: 'typeIt', submittedAnswer: typedAnswer });
+  }
+
+  return (
+    <div className="app">
+      <div className="quiz-header">
+        <button type="button" className="back-link" onClick={onQuit}>
+          ‹ Quit quiz
+        </button>
+        <span className="quiz-header__progress">
+          {Math.min(questionNumber, totalInSession)} / {totalInSession}
+        </span>
+      </div>
+
+      <div className="quiz-prompt">
+        {feedback ? (
+          <span className={feedback.result.correct ? 'quiz-prompt__feedback quiz-prompt__feedback--correct' : 'quiz-prompt__feedback quiz-prompt__feedback--wrong'}>
+            {feedback.result.correct ? '✅ Correct!' : `❌ That was ${COUNTRY_BY_ID[feedback.result.countryId]?.name}`}
+          </span>
+        ) : current ? (
+          session.config.mode === 'findIt' ? (
+            <span>
+              Find: <strong>{current.country.name}</strong>
+            </span>
+          ) : (
+            <span>What country is highlighted?</span>
+          )
+        ) : null}
+      </div>
+
+      <WorldMap fillFor={fillFor} onCountryTap={handleMapTap} />
+
+      {session.config.mode === 'typeIt' && current && (
+        <form className="quiz-answer-form" onSubmit={handleTypeSubmit}>
+          <input
+            type="text"
+            value={typedAnswer}
+            onChange={(e) => setTypedAnswer(e.target.value)}
+            placeholder="Type the country's name…"
+            disabled={!!feedback}
+            autoFocus
+            autoCapitalize="words"
+            autoCorrect="off"
+            spellCheck={false}
+          />
+          <button type="submit" disabled={!!feedback || !typedAnswer.trim()}>
+            Submit
+          </button>
+        </form>
+      )}
+    </div>
+  );
+}

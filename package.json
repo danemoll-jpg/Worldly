@@ -1,0 +1,19 @@
+{
+  "name": "worldly",
+  "private": true,
+  "version": "0.1.0",
+  "description": "A geography study app — an interactive, pannable/zoomable world map for learning every country, not just the big ones. Two untimed quiz modes (find it on the map / type its name), region filtering, per-country miss-tracking that weights future quizzes toward what you get wrong, a mastery heat-map, and session stats.",
+  "workspaces": [
+    "packages/engine",
+    "packages/client"
+  ],
+  "scripts": {
+    "build:engine": "npm run build -w packages/engine",
+    "test": "npm run test -w packages/engine",
+    "dev": "npm run build:engine && npm run dev -w packages/client",
+    "build": "npm run build:engine && npm run build -w packages/client"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  }
+}
