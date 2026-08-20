@@ -10,7 +10,13 @@ interface RecordsScreenProps {
 /** Personal bests, one row per distinct quiz setup you've actually completed — there's no
  * single "top score" for the app (a full-world find-it run and a weak-spots-only type-it run
  * aren't comparable), so this is a list of separate records rather than one leaderboard. Solo
- * study tool, no other players — "personal" is the operative word here, not competitive. */
+ * study tool, no other players — "personal" is the operative word here, not competitive.
+ *
+ * Each record is a single best SESSION, ranked by accuracy first and time only as a tiebreaker
+ * (see isBetterSession in storage.ts) — not independent best-time/best-accuracy numbers. That
+ * matters most for weak spots: the pool of countries in play there shrinks as you improve and
+ * grows as you rack up new misses, so a bare time isn't comparable across sessions the way it
+ * is for a fixed region. Showing the country count next to the record makes that honest. */
 export function RecordsScreen({ history, onBack }: RecordsScreenProps) {
   const records = useMemo(() => groupHistoryByConfig(history), [history]);
 
@@ -22,9 +28,10 @@ export function RecordsScreen({ history, onBack }: RecordsScreenProps) {
         </button>
         <h1>🏅 Your records</h1>
         <p className="start-screen__subtitle">
-          Best time and best accuracy for every quiz setup you've completed — a full-world quiz
-          and a weak-spots-only quiz aren't the same challenge, so each setup keeps its own
-          record.
+          Your best run for every quiz setup you've completed, ranked by accuracy first and time
+          as a tiebreaker — a full-world quiz and a weak-spots-only quiz aren't the same
+          challenge, so each setup keeps its own record. Weak-spots records also show how many
+          countries were in the pool that run, since that count changes as you improve.
         </p>
 
         {records.length === 0 ? (
@@ -40,11 +47,14 @@ export function RecordsScreen({ history, onBack }: RecordsScreenProps) {
                   </span>
                 </div>
                 <div className="records-list__stats">
-                  <span className="records-list__stat" title="Best time">
+                  <span className="records-list__stat" title="Best accuracy">
+                    🎯 {r.bestPercentCorrect}%
+                  </span>
+                  <span className="records-list__stat" title="Time for that run">
                     ⏱ {formatDuration(r.bestTimeMs)}
                   </span>
-                  <span className="records-list__stat" title="Best accuracy">
-                    🎯 {r.bestAccuracy}%
+                  <span className="records-list__stat" title="Countries in the pool that run">
+                    🌍 {r.bestTotalQuestions}
                   </span>
                 </div>
               </li>

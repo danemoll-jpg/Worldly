@@ -82,28 +82,45 @@ export function mergeHistory(a: SessionRecord[], b: SessionRecord[]): SessionRec
     .slice(0, MAX_HISTORY);
 }
 
-export interface PersonalBest {
-  bestTimeMs: number | null;
-  bestAccuracy: number | null;
+/** Ranks two sessions against each other — accuracy first, time only as a tiebreaker. Percent
+ * is the primary signal deliberately: it's meaningful regardless of how many countries were in
+ * play, where time isn't — a weak-spots pool shrinks as you improve and grows as you rack up
+ * new misses, so "who finished faster" between two runs against different-sized pools isn't
+ * really comparable, but "who got a higher percentage" still roughly is. Time only ever breaks
+ * a tie in percent, so a 20-country run and a 3-country run at the same 100% never get ranked
+ * against each other by speed alone. */
+export function isBetterSession(
+  a: { percentCorrect: number; totalElapsedMs: number },
+  b: { percentCorrect: number; totalElapsedMs: number },
+): boolean {
+  if (a.percentCorrect !== b.percentCorrect) return a.percentCorrect > b.percentCorrect;
+  return a.totalElapsedMs < b.totalElapsedMs;
 }
 
-/** Best-ever time and best-ever accuracy for sessions matching this exact config — the two
- * numbers shown as "your record" on the summary screen. Deliberately not a single combined
- * "best session" (fastest and most-accurate aren't always the same run), since either stat on
- * its own is meaningful to beat. */
-export function personalBestFor(history: SessionRecord[], mode: string, scope: string, continentsKey: string): PersonalBest {
+export interface PersonalBest {
+  percentCorrect: number;
+  totalElapsedMs: number;
+  /** How many countries that best run covered — shown alongside it (see RecordsScreen) since,
+   * especially for weak-spots quizzes, the pool size isn't fixed and matters for reading the
+   * number honestly. */
+  totalQuestions: number;
+}
+
+/** The single best-ever session for this exact config, ranked by isBetterSession — deliberately
+ * ONE record, not independent best-time/best-accuracy numbers, so "your record" always names an
+ * actual run that happened rather than a Frankenstein of your fastest run's time and your
+ * best-ever run's accuracy mashed together. */
+export function personalBestFor(history: SessionRecord[], mode: string, scope: string, continentsKey: string): PersonalBest | null {
   const matches = history.filter(
     (h) => h.mode === mode && h.scope === scope && h.continentsKey === continentsKey && h.totalQuestions > 0,
   );
-  if (matches.length === 0) return { bestTimeMs: null, bestAccuracy: null };
-  return {
-    bestTimeMs: Math.min(...matches.map((m) => m.totalElapsedMs)),
-    bestAccuracy: Math.max(...matches.map((m) => m.percentCorrect)),
-  };
+  if (matches.length === 0) return null;
+  const best = matches.reduce((a, b) => (isBetterSession(b, a) ? b : a));
+  return { percentCorrect: best.percentCorrect, totalElapsedMs: best.totalElapsedMs, totalQuestions: best.totalQuestions };
 }
 
 /** One row of the records screen — every distinct (mode, scope, region) combination the player
- * has actually completed at least once, each with its own personal bests. There's no single
+ * has actually completed at least once, each with its own single best session. There's no one
  * "top score" for the app as a whole: a full-world find-it run and a weak-spots-only type-it
  * run aren't comparable, so this is deliberately a list of separate records, not one number. */
 export interface ConfigRecord {
@@ -111,8 +128,9 @@ export interface ConfigRecord {
   scope: SessionRecord['scope'];
   continentsKey: string;
   timesPlayed: number;
+  bestPercentCorrect: number;
   bestTimeMs: number;
-  bestAccuracy: number;
+  bestTotalQuestions: number;
   lastPlayedAt: number;
 }
 
@@ -129,14 +147,18 @@ export function groupHistoryByConfig(history: SessionRecord[]): ConfigRecord[] {
     else groups.set(key, [record]);
   }
   return Array.from(groups.values())
-    .map((records): ConfigRecord => ({
-      mode: records[0].mode,
-      scope: records[0].scope,
-      continentsKey: records[0].continentsKey,
-      timesPlayed: records.length,
-      bestTimeMs: Math.min(...records.map((r) => r.totalElapsedMs)),
-      bestAccuracy: Math.max(...records.map((r) => r.percentCorrect)),
-      lastPlayedAt: Math.max(...records.map((r) => r.completedAt)),
-    }))
+    .map((records): ConfigRecord => {
+      const best = records.reduce((a, b) => (isBetterSession(b, a) ? b : a));
+      return {
+        mode: records[0].mode,
+        scope: records[0].scope,
+        continentsKey: records[0].continentsKey,
+        timesPlayed: records.length,
+        bestPercentCorrect: best.percentCorrect,
+        bestTimeMs: best.totalElapsedMs,
+        bestTotalQuestions: best.totalQuestions,
+        lastPlayedAt: Math.max(...records.map((r) => r.completedAt)),
+      };
+    })
     .sort((a, b) => b.lastPlayedAt - a.lastPlayedAt);
 }

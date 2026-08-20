@@ -1,7 +1,7 @@
 import { COUNTRY_BY_ID, QuizConfig, SessionSummary } from '@worldly/engine';
 import { formatDuration } from '../lib/format';
 import { GAME_HUB_URL } from '../lib/hub';
-import { PersonalBest } from '../lib/storage';
+import { isBetterSession, PersonalBest } from '../lib/storage';
 
 interface SummaryScreenProps {
   summary: SessionSummary;
@@ -12,24 +12,30 @@ interface SummaryScreenProps {
 }
 
 export function SummaryScreen({ summary, personalBest, onPlayAgain, onHome }: SummaryScreenProps) {
-  const newBestAccuracy = personalBest ? (personalBest.bestAccuracy === null || summary.percentCorrect > personalBest.bestAccuracy) : false;
-  const newBestTime = personalBest ? (personalBest.bestTimeMs === null || summary.totalElapsedMs < personalBest.bestTimeMs) : false;
+  // One combined "best," not independent accuracy/time badges — see storage.ts's
+  // isBetterSession for why (ranks by accuracy first, time only as a tiebreaker), and so this
+  // always names an actual run that happened, not a mix-and-match of your fastest run's time
+  // with your most-accurate run's percentage from two different sessions.
+  const isNewBest = !personalBest || isBetterSession(summary, personalBest);
   const misses = summary.results.filter((r) => !r.correct);
 
   return (
     <div className="game-over">
       <div className="game-over__card">
         <div className="game-over__emoji">🌍</div>
-        <h2>Quiz complete!</h2>
+        <h2>
+          Quiz complete!
+          {isNewBest && <span className="new-record-badge">🏅 New best for this setup!</span>}
+        </h2>
 
         <div className="summary-stats">
           <div className="summary-stat">
             <span className="summary-stat__value">{summary.percentCorrect}%</span>
-            <span className="summary-stat__label">Correct{newBestAccuracy && <span className="new-record-badge">🏅 New best!</span>}</span>
+            <span className="summary-stat__label">Correct</span>
           </div>
           <div className="summary-stat">
             <span className="summary-stat__value">{formatDuration(summary.totalElapsedMs)}</span>
-            <span className="summary-stat__label">Time{newBestTime && <span className="new-record-badge">🏅 New best!</span>}</span>
+            <span className="summary-stat__label">Time</span>
           </div>
           <div className="summary-stat">
             <span className="summary-stat__value">
