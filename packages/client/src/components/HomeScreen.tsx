@@ -5,12 +5,13 @@ interface HomeScreenProps {
   onStartQuiz: () => void;
   onBrowse: () => void;
   onMasteryMap: () => void;
+  onRecords: () => void;
   onSync: () => void;
   syncStatus: SyncStatus;
   syncCode: string | null;
 }
 
-export function HomeScreen({ onStartQuiz, onBrowse, onMasteryMap, onSync, syncStatus, syncCode }: HomeScreenProps) {
+export function HomeScreen({ onStartQuiz, onBrowse, onMasteryMap, onRecords, onSync, syncStatus, syncCode }: HomeScreenProps) {
   const synced = syncStatus === 'synced' && !!syncCode;
 
   return (
@@ -40,6 +41,11 @@ export function HomeScreen({ onStartQuiz, onBrowse, onMasteryMap, onSync, syncSt
             <span className="home-screen__choice-emoji">🗺️</span>
             <span className="home-screen__choice-title">Mastery map</span>
             <span className="home-screen__choice-sub">See the whole world colored by how solid you are on each country.</span>
+          </button>
+          <button type="button" className="home-screen__choice" onClick={onRecords}>
+            <span className="home-screen__choice-emoji">🏅</span>
+            <span className="home-screen__choice-title">Your records</span>
+            <span className="home-screen__choice-sub">Best time and accuracy for every quiz setup you've completed.</span>
           </button>
           <button type="button" className="home-screen__choice" onClick={onSync}>
             <span className="home-screen__choice-emoji">🔄</span>

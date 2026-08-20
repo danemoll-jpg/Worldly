@@ -3,12 +3,13 @@ import { HomeScreen } from './components/HomeScreen';
 import { LookupScreen } from './components/LookupScreen';
 import { MasteryScreen } from './components/MasteryScreen';
 import { QuizScreen } from './components/QuizScreen';
+import { RecordsScreen } from './components/RecordsScreen';
 import { SetupScreen } from './components/SetupScreen';
 import { SummaryScreen } from './components/SummaryScreen';
 import { SyncScreen } from './components/SyncScreen';
 import { useQuiz } from './hooks/useQuiz';
 
-type Screen = 'home' | 'setup' | 'lookup' | 'mastery' | 'sync';
+type Screen = 'home' | 'setup' | 'lookup' | 'mastery' | 'sync' | 'records';
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('home');
@@ -59,6 +60,10 @@ export default function App() {
     return <MasteryScreen stats={quiz.stats} onBack={() => setScreen('home')} />;
   }
 
+  if (screen === 'records') {
+    return <RecordsScreen history={quiz.history} onBack={() => setScreen('home')} />;
+  }
+
   if (screen === 'sync') {
     return (
       <SyncScreen
@@ -78,6 +83,7 @@ export default function App() {
       onStartQuiz={() => setScreen('setup')}
       onBrowse={() => setScreen('lookup')}
       onMasteryMap={() => setScreen('mastery')}
+      onRecords={() => setScreen('records')}
       onSync={() => setScreen('sync')}
       syncStatus={quiz.syncStatus}
       syncCode={quiz.syncCode}

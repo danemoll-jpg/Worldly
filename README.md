@@ -39,7 +39,9 @@ Includes:
   up.
 - **Session stats** — completion time and percent correct, shown on the summary screen with a
   "new best" badge when you beat your own record for that exact quiz setup. Recorded, never a
-  gate.
+  gate. A **records screen** lists your best time and best accuracy for every quiz setup you've
+  actually completed — there's no single "top score," since a full-world quiz and a
+  weak-spots-only quiz aren't comparable challenges.
 - No bots, no opponents — this is a solo study tool, not a game against anyone. Works entirely
   locally (localStorage) with zero setup; optionally, **sync your stats and history across your
   own devices** with a shared code — no account, same "the code is the access control" trust

@@ -101,3 +101,42 @@ export function personalBestFor(history: SessionRecord[], mode: string, scope: s
     bestAccuracy: Math.max(...matches.map((m) => m.percentCorrect)),
   };
 }
+
+/** One row of the records screen — every distinct (mode, scope, region) combination the player
+ * has actually completed at least once, each with its own personal bests. There's no single
+ * "top score" for the app as a whole: a full-world find-it run and a weak-spots-only type-it
+ * run aren't comparable, so this is deliberately a list of separate records, not one number. */
+export interface ConfigRecord {
+  mode: SessionRecord['mode'];
+  scope: SessionRecord['scope'];
+  continentsKey: string;
+  timesPlayed: number;
+  bestTimeMs: number;
+  bestAccuracy: number;
+  lastPlayedAt: number;
+}
+
+/** Groups history into one ConfigRecord per distinct config actually played, newest-played
+ * first — the natural order for "what have I been doing lately," and stable even as new
+ * sessions keep getting prepended to `history`. */
+export function groupHistoryByConfig(history: SessionRecord[]): ConfigRecord[] {
+  const groups = new Map<string, SessionRecord[]>();
+  for (const record of history) {
+    if (record.totalQuestions === 0) continue; // same guard personalBestFor uses
+    const key = `${record.mode}|${record.scope}|${record.continentsKey}`;
+    const existing = groups.get(key);
+    if (existing) existing.push(record);
+    else groups.set(key, [record]);
+  }
+  return Array.from(groups.values())
+    .map((records): ConfigRecord => ({
+      mode: records[0].mode,
+      scope: records[0].scope,
+      continentsKey: records[0].continentsKey,
+      timesPlayed: records.length,
+      bestTimeMs: Math.min(...records.map((r) => r.totalElapsedMs)),
+      bestAccuracy: Math.max(...records.map((r) => r.percentCorrect)),
+      lastPlayedAt: Math.max(...records.map((r) => r.completedAt)),
+    }))
+    .sort((a, b) => b.lastPlayedAt - a.lastPlayedAt);
+}
