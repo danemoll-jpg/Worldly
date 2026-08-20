@@ -447,6 +447,13 @@ button {
   right: 0.6rem;
 }
 
+/* Insets with real surrounding geography (see geo.ts's contextBounds) show meaningfully more
+   than a handful of dots — worth a bit more room than the plain-dot insets get. */
+.world-map__inset--with-context {
+  width: 42%;
+  max-width: 17rem;
+}
+
 .world-map__inset-label {
   font-size: 0.62rem;
   font-weight: 700;
@@ -474,6 +481,19 @@ button {
 }
 
 .world-map__inset-country:hover {
+  filter: brightness(1.15);
+}
+
+/* Real neighboring countries (Italy, France, ...) drawn for orientation — same idea as the
+   main map's shapes, just at inset scale, so a thinner border reads right at this size. */
+.world-map__inset-context {
+  stroke: rgba(10, 18, 32, 0.75);
+  stroke-width: 0.4;
+  cursor: pointer;
+  transition: fill 0.2s ease;
+}
+
+.world-map__inset-context:hover {
   filter: brightness(1.15);
 }
 

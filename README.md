@@ -20,6 +20,9 @@ Includes:
   Marino; several Eastern Caribbean island states are even closer) — those get pulled into a
   small zoomed-in **inset box** in a corner of the map instead, the same fix real atlases use
   for exactly this problem, so tapping "right on top of" one never resolves to its neighbor.
+  The Europe microstates inset also draws the real surrounding geography (Italy, France,
+  Switzerland, the Balkans, ...) underneath the dots, not just empty space, so each one sits
+  somewhere recognizable instead of floating in a void.
 - **Two quiz modes**: "find it" (you're told a country's name, tap it on the map) and "type
   it" (a country's highlighted, you type its name — untimed, and lenient about typos and
   alternate names like "USA" or "Czechia" vs. "Czech Republic").

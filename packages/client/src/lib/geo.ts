@@ -75,13 +75,29 @@ const TAP_RADIUS_MARGIN = 0.5;
  * between them on the main map — each gets its own small, zoomed-in inset box instead (see
  * WorldMap.tsx), the same fix atlases and other geography references use for exactly this
  * problem. `viewBox` is deliberately shaped to each cluster's real aspect ratio (the Caribbean
- * chain runs north-south; the European microstates run east-west), not a generic square. */
-export const INSET_GROUPS: { id: string; label: string; countryIds: string[]; viewBox: { width: number; height: number } }[] = [
+ * chain runs north-south; the European microstates run east-west), not a generic square.
+ *
+ * `contextBounds` (optional), [minLon, minLat, maxLon, maxLat]: when set, the inset renders
+ * actual surrounding geography — real neighboring countries drawn at true position/shape, the
+ * same look real atlases give a "Europe microstates" inset — instead of just clean dots in a
+ * void. Only worth it where nearby land actually helps orient the tiny countries (Vatican
+ * City/San Marino sitting inside/near Italy); omitted for the Caribbean cluster, which is mostly
+ * open ocean with nothing nearby to anchor against. */
+export const INSET_GROUPS: {
+  id: string;
+  label: string;
+  countryIds: string[];
+  viewBox: { width: number; height: number };
+  contextBounds?: [number, number, number, number];
+}[] = [
   {
     id: 'europe-microstates',
     label: 'Europe microstates',
     countryIds: ['438', '336', '674', '492', '020'], // Liechtenstein, Vatican City, San Marino, Monaco, Andorra
-    viewBox: { width: 200, height: 100 },
+    viewBox: { width: 250, height: 155 },
+    // Western/Central/Southern Europe — comfortably spans Andorra in the west to the Balkans
+    // in the east, and Italy's Alps down through Sicily north-south.
+    contextBounds: [-2, 36, 19, 49],
   },
   {
     id: 'caribbean-states',
@@ -104,10 +120,19 @@ export interface InsetFeature {
   cy: number;
 }
 
+export interface InsetContextPath {
+  id: string;
+  path: string;
+}
+
 export interface Inset {
   id: string;
   label: string;
   viewBox: { width: number; height: number };
+  /** Real neighboring geography for orientation (see INSET_GROUPS' contextBounds) — rendered
+   * as ordinary filled shapes underneath the dots, same as the main map. Empty for insets
+   * without contextBounds (the Caribbean cluster). */
+  contextPaths: InsetContextPath[];
   features: InsetFeature[];
 }
 
@@ -170,32 +195,147 @@ function projectFeature(f: any, pathGenerator: ReturnType<typeof geoPath>): Proj
   return { path: pieces.join(' '), primaryBounds: primary?.bounds ?? null };
 }
 
-/** Builds one inset: a small projection fitted to this cluster's own countries, positioning
- * each one accurately relative to the others — but drawn as a fixed-size dot, NOT its real
- * to-scale outline. The clusters this exists for have huge internal size disparity (Andorra is
- * roughly 1000x the area of Vatican City) — fitting a shared scale to the whole group still
- * leaves the smallest members sub-pixel, so scaling up doesn't actually solve the problem it's
- * meant to solve. Real-position dots sidestep that entirely: every member gets an equally
- * tappable target regardless of its true size, while still sitting in roughly the right spot
- * relative to its neighbors. */
+/** Simple (non-antimeridian-aware) lon/lat bounding box of a single polygon ring's coordinates
+ * — fine for every use here since none of the crop regions this supports come anywhere near
+ * ±180°. Used instead of d3-geo's own geoBounds specifically because that IS antimeridian-
+ * aware, which backfires for a small regional crop: multi-piece countries like France or the
+ * Netherlands include far-flung overseas territories in the same raw feature, and dateline-
+ * spanning ones like Russia store coordinates that swing from -180 to 180, both of which make
+ * geoBounds report a bounding box that (wrongly) covers most of the globe. A plain per-ring
+ * min/max sidesteps both: it only reports where each individual ring actually is. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function ringBounds(ring: any[]): Bounds {
+  let minLon = Infinity;
+  let maxLon = -Infinity;
+  let minLat = Infinity;
+  let maxLat = -Infinity;
+  for (const path of ring) {
+    for (const [lon, lat] of path) {
+      if (lon < minLon) minLon = lon;
+      if (lon > maxLon) maxLon = lon;
+      if (lat < minLat) minLat = lat;
+      if (lat > maxLat) maxLat = lat;
+    }
+  }
+  return [minLon, minLat, maxLon, maxLat];
+}
+
+function ringOverlapsRegion(bounds: Bounds, region: [number, number, number, number]): boolean {
+  const [minLon, minLat, maxLon, maxLat] = bounds;
+  const [rMinLon, rMinLat, rMaxLon, rMaxLat] = region;
+  // A ring spanning more than half the globe in longitude is never a real presence in a
+  // regional crop this small — it's a dateline-wraparound artifact (see Russia's mainland
+  // ring, stored as coordinates jumping between -180 and 180). Treat it as "not here."
+  if (maxLon - minLon > 180) return false;
+  return !(maxLon < rMinLon || minLon > rMaxLon || maxLat < rMinLat || minLat > rMaxLat);
+}
+
+/** Keeps only the pieces of a feature that actually fall within `region`, dropping the rest —
+ * e.g. France keeps its European mainland/Corsica but not French Guiana or Réunion. Returns
+ * null if nothing survives. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function cropFeatureToRegion(f: any, region: [number, number, number, number]): any | null {
+  if (f.geometry?.type === 'Polygon') {
+    return ringOverlapsRegion(ringBounds(f.geometry.coordinates), region) ? f : null;
+  }
+  if (f.geometry?.type === 'MultiPolygon') {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const kept = (f.geometry.coordinates as any[]).filter((polygon) => ringOverlapsRegion(ringBounds(polygon), region));
+    if (kept.length === 0) return null;
+    return { ...f, geometry: { type: 'MultiPolygon', coordinates: kept } };
+  }
+  return null;
+}
+
+/** Fits a fresh projection to a plain lon/lat rectangle (`region`) so it fills `extent` —
+ * deliberately NOT via `.fitExtent()`. That goes through geoPath's adaptive resampling to
+ * measure the bounds, and for a hand-built rectangle (as opposed to a real coastline's dense,
+ * natural vertices) that resampling can badly misbehave: verified directly that it was reporting
+ * a bounding box roughly 20x too wide, built from points nowhere near where the rectangle
+ * actually projects — a cousin of the exact adaptive-resampling issue documented on
+ * MAX_PLAUSIBLE_RING_WIDTH above, just triggered by a different kind of geometry. Sidestepping
+ * it: sample points directly along the rectangle's edges through the projection FUNCTION itself
+ * (bypassing geoPath entirely), and derive scale/translate from that — the same algebra
+ * `.fitExtent()` uses internally, just skipping its problematic bounds step. */
+function fitProjectionToRegion(
+  region: [number, number, number, number],
+  extent: [[number, number], [number, number]],
+): ReturnType<typeof geoNaturalEarth1> {
+  const [minLon, minLat, maxLon, maxLat] = region;
+  const [[ex0, ey0], [ex1, ey1]] = extent;
+
+  const STEPS = 16;
+  const samples: [number, number][] = [];
+  for (let i = 0; i <= STEPS; i++) {
+    const t = i / STEPS;
+    samples.push([minLon + (maxLon - minLon) * t, minLat], [minLon + (maxLon - minLon) * t, maxLat]);
+    samples.push([minLon, minLat + (maxLat - minLat) * t], [maxLon, minLat + (maxLat - minLat) * t]);
+  }
+
+  const unitProjection = geoNaturalEarth1().scale(1).translate([0, 0]);
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (const point of samples) {
+    const projected = unitProjection(point);
+    if (!projected) continue;
+    const [x, y] = projected;
+    if (x < minX) minX = x;
+    if (x > maxX) maxX = x;
+    if (y < minY) minY = y;
+    if (y > maxY) maxY = y;
+  }
+
+  const k = Math.min((ex1 - ex0) / (maxX - minX), (ey1 - ey0) / (maxY - minY));
+  const translateX = (ex0 + ex1) / 2 - (k * (minX + maxX)) / 2;
+  const translateY = (ey0 + ey1) / 2 - (k * (minY + maxY)) / 2;
+  return geoNaturalEarth1().scale(k).translate([translateX, translateY]);
+}
+
+/** Builds one inset. Every member of the cluster is drawn as a fixed-size dot, positioned
+ * accurately relative to its neighbors, NOT as a to-scale outline — these clusters have huge
+ * internal size disparity (Andorra is roughly 1000x the area of Vatican City), so fitting a
+ * shared scale to the whole group still leaves the smallest members sub-pixel, one level
+ * removed from the problem insets exist to solve. Real-position dots sidestep that entirely:
+ * every member gets an equally tappable target regardless of its true size.
+ *
+ * When the group has `contextBounds` set, the projection is instead fitted to that whole
+ * region (not just the cluster's own countries), and every other country whose territory falls
+ * within it gets drawn too, as an ordinary filled shape — real surrounding geography (Italy,
+ * France, ...) to orient the dots against, instead of them floating in a void. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function buildInset(group: (typeof INSET_GROUPS)[number], geojson: any): Inset {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const groupFeatures = geojson.features.filter((f: any) => group.countryIds.includes(f.id));
-  const fc = { type: 'FeatureCollection' as const, features: groupFeatures };
   const { width, height } = group.viewBox;
-  const projection = geoNaturalEarth1().fitExtent(
-    [
-      [INSET_MARGIN, INSET_MARGIN],
-      [width - INSET_MARGIN, height - INSET_MARGIN],
-    ],
-    fc,
-  );
+  const extent: [[number, number], [number, number]] = [
+    [INSET_MARGIN, INSET_MARGIN],
+    [width - INSET_MARGIN, height - INSET_MARGIN],
+  ];
+
+  const region = group.contextBounds;
+  const projection = region
+    ? fitProjectionToRegion(region, extent)
+    : geoNaturalEarth1().fitExtent(extent, { type: 'FeatureCollection' as const, features: groupFeatures });
   const pathGenerator = geoPath(projection);
+
+  const contextPaths: InsetContextPath[] = region
+    ? geojson.features
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .filter((f: any) => !group.countryIds.includes(f.id))
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .map((f: any) => cropFeatureToRegion(f, region))
+        .filter(Boolean)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .map((f: any) => ({ id: f.id as string, path: projectFeature(f, pathGenerator).path }))
+    : [];
+
   return {
     id: group.id,
     label: group.label,
     viewBox: group.viewBox,
+    contextPaths,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     features: groupFeatures.map((f: any) => {
       const [cx, cy] = pathGenerator.centroid(f);

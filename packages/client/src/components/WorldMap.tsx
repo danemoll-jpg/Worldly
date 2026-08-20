@@ -120,20 +120,37 @@ export function WorldMap({ fillFor, onCountryTap, className }: WorldMapProps) {
 
       {/* Inset boxes: separate, non-zoomable mini-maps for clusters of tiny countries too close
           together for any marker radius to tell apart on the main map (see geo.ts's
-          INSET_GROUPS) — the same fix atlases use for exactly this problem. Each country draws
-          as a fixed-size dot at its real relative position rather than a to-scale outline —
-          these clusters have huge internal size gaps too (Andorra vs. Vatican City), so even a
-          zoomed-in to-scale shape would leave the smallest members sub-pixel again. */}
+          INSET_GROUPS) — the same fix atlases use for exactly this problem. Each cluster member
+          draws as a fixed-size dot at its real relative position rather than a to-scale outline
+          — these clusters have huge internal size gaps too (Andorra vs. Vatican City), so even
+          a zoomed-in to-scale shape would leave the smallest members sub-pixel again. Where the
+          group has real surrounding geography worth showing (contextPaths — see INSET_GROUPS'
+          contextBounds), it's drawn underneath as ordinary filled/clickable shapes, same as the
+          main map, so the dots sit in visible context instead of a void. */}
       {insets.map((inset) => {
         const position = INSET_POSITION[inset.id] ?? 'top-left';
+        const hasContext = inset.contextPaths.length > 0;
         return (
           <div
             key={inset.id}
-            className={`world-map__inset world-map__inset--${position}`}
+            className={`world-map__inset world-map__inset--${position}${hasContext ? ' world-map__inset--with-context' : ''}`}
             style={{ aspectRatio: `${inset.viewBox.width} / ${inset.viewBox.height}` }}
           >
             <div className="world-map__inset-label">{inset.label}</div>
             <svg viewBox={`0 0 ${inset.viewBox.width} ${inset.viewBox.height}`} className="world-map__inset-svg">
+              {inset.contextPaths.map((contextPath) => {
+                const mainFeature = featureById.get(contextPath.id);
+                if (!mainFeature) return null;
+                return (
+                  <path
+                    key={contextPath.id}
+                    d={contextPath.path}
+                    fill={fillFor(mainFeature)}
+                    className="world-map__inset-context"
+                    onClick={() => onCountryTap?.(mainFeature)}
+                  />
+                );
+              })}
               {inset.features.map((insetFeature) => {
                 const mainFeature = featureById.get(insetFeature.id);
                 if (!mainFeature) return null;
@@ -143,7 +160,7 @@ export function WorldMap({ fillFor, onCountryTap, className }: WorldMapProps) {
                     data-country-id={insetFeature.id}
                     cx={insetFeature.cx}
                     cy={insetFeature.cy}
-                    r={7}
+                    r={hasContext ? 4 : 7}
                     fill={fillFor(mainFeature)}
                     className="world-map__inset-country"
                     onClick={() => onCountryTap?.(mainFeature)}
