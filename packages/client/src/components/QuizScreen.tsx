@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Answer, COUNTRY_BY_ID, QuizAnswerResult, QuizSessionState } from '@worldly/engine';
+import { ConfirmDialog } from './ConfirmDialog';
 import { MapFeature } from '../lib/geo';
 import { WorldMap } from './WorldMap';
 
@@ -8,6 +9,10 @@ interface QuizScreenProps {
   onAnswer: (answer: Answer) => void;
   onSkip: () => void;
   onQuit: () => void;
+  /** Same config, fresh session — throws away every answer given so far this attempt, which is
+   * exactly why QuizScreen gates it behind a confirm dialog rather than firing it straight from
+   * the button. */
+  onRestart: () => void;
 }
 
 interface Feedback {
@@ -16,9 +21,10 @@ interface Feedback {
 
 const FEEDBACK_DISPLAY_MS = 1200;
 
-export function QuizScreen({ session, onAnswer, onSkip, onQuit }: QuizScreenProps) {
+export function QuizScreen({ session, onAnswer, onSkip, onQuit, onRestart }: QuizScreenProps) {
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [typedAnswer, setTypedAnswer] = useState('');
+  const [confirmingRestart, setConfirmingRestart] = useState(false);
   const seenResultCount = useRef(0);
   // Correctness per already-answered country this session — each country is asked at most
   // once, so this is a plain 1:1 map, not a running tally.
@@ -84,9 +90,14 @@ export function QuizScreen({ session, onAnswer, onSkip, onQuit }: QuizScreenProp
   return (
     <div className="app">
       <div className="quiz-header">
-        <button type="button" className="back-link" onClick={onQuit}>
-          ‹ Quit quiz
-        </button>
+        <div className="quiz-header__left">
+          <button type="button" className="back-link" onClick={onQuit}>
+            ‹ Quit quiz
+          </button>
+          <button type="button" className="quiz-restart" onClick={() => setConfirmingRestart(true)}>
+            ↺ Restart
+          </button>
+        </div>
         <span className="quiz-header__progress">
           {Math.min(questionNumber, totalInSession)} / {totalInSession}
         </span>
@@ -132,6 +143,23 @@ export function QuizScreen({ session, onAnswer, onSkip, onQuit }: QuizScreenProp
             Submit
           </button>
         </form>
+      )}
+
+      {confirmingRestart && (
+        <ConfirmDialog
+          title="Restart this quiz?"
+          message={
+            session.results.length > 0
+              ? `You've answered ${session.results.length} of ${totalInSession} so far — restarting throws that away and starts the same setup over from question 1.`
+              : "Start this setup over from question 1?"
+          }
+          confirmLabel="Restart"
+          onConfirm={() => {
+            setConfirmingRestart(false);
+            onRestart();
+          }}
+          onCancel={() => setConfirmingRestart(false)}
+        />
       )}
     </div>
   );
