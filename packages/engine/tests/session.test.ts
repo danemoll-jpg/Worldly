@@ -26,14 +26,28 @@ describe('startSession', () => {
     expect(state.pool).toHaveLength(4);
   });
 
-  it('"weakSpots" scope only includes countries with at least one past miss', () => {
+  it('"weakSpots" scope only includes countries currently shaky/struggling by miss ratio', () => {
     const stats: StatsMap = {
-      fr: { countryId: 'fr', seen: 3, missed: 1, lastSeenAt: null },
-      de: { countryId: 'de', seen: 3, missed: 0, lastSeenAt: null },
+      fr: { countryId: 'fr', seen: 3, missed: 1, lastSeenAt: null }, // ratio 0.33 — shaky
+      de: { countryId: 'de', seen: 3, missed: 0, lastSeenAt: null }, // ratio 0 — solid
     };
     const config: QuizConfig = { mode: 'typeIt', continents: 'all', scope: 'weakSpots' };
     const state = startSession(config, POOL, stats, rng);
     expect(state.pool.map((c) => c.id)).toEqual(['fr']);
+  });
+
+  it('"weakSpots" scope drops a country once it\'s mastered since, even with old misses on record', () => {
+    // One miss a long time ago, ten clean answers since — masteryLevel reads this as 'solid'
+    // (ratio 1/11 ≈ 0.09, under the 0.15 shaky threshold), so it should no longer show up in a
+    // weak-spots quiz even though `missed` is still a nonzero 1 in the lifetime stats. This is
+    // exactly the "why is my weak-spots count higher than the mastery map's shaky+struggling
+    // count" gap this scope is meant to have closed.
+    const stats: StatsMap = {
+      fr: { countryId: 'fr', seen: 11, missed: 1, lastSeenAt: null },
+    };
+    const config: QuizConfig = { mode: 'typeIt', continents: 'all', scope: 'weakSpots' };
+    const state = startSession(config, POOL, stats, rng);
+    expect(state.pool).toHaveLength(0);
   });
 
   it('starts with a null current question when the pool is empty', () => {

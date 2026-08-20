@@ -3,6 +3,7 @@
 // deadline anywhere in here — `elapsedMs` per question and `totalElapsedMs` for the session are
 // recorded for the summary screen, never enforced.
 import { isAnswerCorrect } from './matching.js';
+import { masteryLevel } from './stats.js';
 import {
   CountryDef,
   QuizAnswerResult,
@@ -18,7 +19,14 @@ function filterPool(allCountries: CountryDef[], config: QuizConfig, statsMap: St
   const byRegion =
     config.continents === 'all' ? allCountries : allCountries.filter((c) => config.continents.includes(c.continent));
   if (config.scope === 'weakSpots') {
-    return byRegion.filter((c) => (statsMap[c.id]?.missed ?? 0) > 0);
+    // Same 'shaky'/'struggling' definition the mastery map colors countries by (miss RATIO,
+    // not a lifetime "ever missed once" flag) — so a country you mostly nailed since one early
+    // slip reads as mastered on both screens, not stuck in this pool forever just because
+    // `missed` never goes back down. See masteryLevel's own doc comment for the thresholds.
+    return byRegion.filter((c) => {
+      const level = masteryLevel(statsMap[c.id]);
+      return level === 'shaky' || level === 'struggling';
+    });
   }
   return byRegion;
 }

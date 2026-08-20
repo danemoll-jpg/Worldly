@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { CONTINENTS, Continent, COUNTRIES, QuizConfig, QuizMode, QuizScope, StatsMap } from '@worldly/engine';
+import { CONTINENTS, Continent, COUNTRIES, masteryLevel, QuizConfig, QuizMode, QuizScope, StatsMap } from '@worldly/engine';
 
 interface SetupScreenProps {
   stats: StatsMap;
@@ -7,9 +7,19 @@ interface SetupScreenProps {
   onStart: (config: QuizConfig) => void;
 }
 
+// Same 'shaky'/'struggling' definition session.ts's filterPool uses for the real weak-spots
+// pool (miss RATIO, not a lifetime "ever missed once" flag) — this used to be its own separate
+// `missed > 0` check that quietly drifted from what a weak-spots quiz actually contained, so the
+// count shown here could disagree with both the quiz you were about to start and the mastery
+// map. Keeping both filters point at the same masteryLevel call is what keeps them honest.
+function isWeakSpot(countryId: string, stats: StatsMap): boolean {
+  const level = masteryLevel(stats[countryId]);
+  return level === 'shaky' || level === 'struggling';
+}
+
 function poolSize(continents: Continent[] | 'all', scope: QuizScope, stats: StatsMap): number {
   let pool = continents === 'all' ? COUNTRIES : COUNTRIES.filter((c) => continents.includes(c.continent));
-  if (scope === 'weakSpots') pool = pool.filter((c) => (stats[c.id]?.missed ?? 0) > 0);
+  if (scope === 'weakSpots') pool = pool.filter((c) => isWeakSpot(c.id, stats));
   return pool.length;
 }
 
@@ -18,7 +28,7 @@ export function SetupScreen({ stats, onBack, onStart }: SetupScreenProps) {
   const [continents, setContinents] = useState<Continent[] | 'all'>('all');
   const [scope, setScope] = useState<QuizScope>('all');
 
-  const weakSpotCount = useMemo(() => COUNTRIES.filter((c) => (stats[c.id]?.missed ?? 0) > 0).length, [stats]);
+  const weakSpotCount = useMemo(() => COUNTRIES.filter((c) => isWeakSpot(c.id, stats)).length, [stats]);
   const count = poolSize(continents, scope, stats);
 
   function toggleContinent(c: Continent) {
@@ -90,8 +100,8 @@ export function SetupScreen({ stats, onBack, onStart }: SetupScreenProps) {
           </div>
           <span className="start-screen__hint">
             {weakSpotCount === 0
-              ? "You haven't missed anything yet — take a full quiz first and this unlocks."
-              : `${weakSpotCount} countries you've missed at least once, across all regions.`}
+              ? "Nothing currently shaky or struggling — take a full quiz first and this unlocks."
+              : `${weakSpotCount} countries currently shaky or struggling, across all regions — same list as the mastery map, so this one shrinks as you improve.`}
           </span>
         </label>
 
