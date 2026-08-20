@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isSessionComplete, startSession, submitAnswer, summarizeSession } from '../src/session.js';
+import { isSessionComplete, skipCurrent, startSession, submitAnswer, summarizeSession } from '../src/session.js';
 import { CountryDef, QuizConfig, StatsMap } from '../src/types.js';
 
 const POOL: CountryDef[] = [
@@ -85,6 +85,67 @@ describe('submitAnswer + full session flow', () => {
     const state = startSession(config, POOL, {}, rng);
     const after = submitAnswer(state, { type: 'findIt', clickedCountryId: 'anything' });
     expect(after).toEqual(state);
+  });
+});
+
+describe('skipCurrent', () => {
+  it('moves the current question to the back without touching askedIds/results', () => {
+    const config: QuizConfig = { mode: 'findIt', continents: 'all', scope: 'all' };
+    let state = startSession(config, POOL, {}, rng);
+    const firstId = state.current!.country.id;
+
+    state = skipCurrent(state);
+
+    expect(state.current!.country.id).not.toBe(firstId);
+    expect(state.askedIds).toEqual([]);
+    expect(state.results).toEqual([]);
+    // Nothing lost — same countries, just reordered, and the skipped one is now at the back.
+    expect(state.remaining.map((c) => c.id).sort()).toEqual(state.pool.map((c) => c.id).sort());
+    expect(state.remaining[state.remaining.length - 1].id).toBe(firstId);
+  });
+
+  it('the skipped country comes back around later in the same session', () => {
+    const config: QuizConfig = { mode: 'findIt', continents: 'all', scope: 'all' };
+    let state = startSession(config, POOL, {}, rng);
+    const skippedId = state.current!.country.id;
+    state = skipCurrent(state);
+
+    // Answer everything else first...
+    while (state.current!.country.id !== skippedId) {
+      state = submitAnswer(state, { type: 'findIt', clickedCountryId: state.current!.country.id });
+    }
+    // ...and the skipped country is still there, answerable, at the very end.
+    expect(state.current!.country.id).toBe(skippedId);
+    expect(isSessionComplete(state)).toBe(false);
+    state = submitAnswer(state, { type: 'findIt', clickedCountryId: skippedId });
+    expect(isSessionComplete(state)).toBe(true);
+    expect(state.results.map((r) => r.countryId).sort()).toEqual(POOL.map((c) => c.id).sort());
+  });
+
+  it("doesn't total-question count or pool order — 'X of N' stays stable across skips", () => {
+    const config: QuizConfig = { mode: 'findIt', continents: 'all', scope: 'all' };
+    let state = startSession(config, POOL, {}, rng);
+    const poolOrder = state.pool.map((c) => c.id);
+    state = skipCurrent(state);
+    state = skipCurrent(state);
+    expect(state.pool.map((c) => c.id)).toEqual(poolOrder);
+  });
+
+  it('is a no-op with one question left (guarantees the session can always terminate)', () => {
+    const config: QuizConfig = { mode: 'findIt', continents: 'all', scope: 'all' };
+    let state = startSession(config, POOL, {}, rng);
+    while (state.remaining.length > 1) {
+      state = submitAnswer(state, { type: 'findIt', clickedCountryId: state.current!.country.id });
+    }
+    const before = state;
+    const after = skipCurrent(state);
+    expect(after).toEqual(before);
+  });
+
+  it('is a no-op once the session is already complete', () => {
+    const config: QuizConfig = { mode: 'findIt', continents: ['Oceania'], scope: 'all' };
+    const state = startSession(config, POOL, {}, rng);
+    expect(skipCurrent(state)).toEqual(state);
   });
 });
 

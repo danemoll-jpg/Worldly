@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Answer, COUNTRY_BY_ID, QuizAnswerResult, QuizSessionState } from '@worldly/engine';
 import { MapFeature } from '../lib/geo';
 import { WorldMap } from './WorldMap';
@@ -6,6 +6,7 @@ import { WorldMap } from './WorldMap';
 interface QuizScreenProps {
   session: QuizSessionState;
   onAnswer: (answer: Answer) => void;
+  onSkip: () => void;
   onQuit: () => void;
 }
 
@@ -15,10 +16,11 @@ interface Feedback {
 
 const FEEDBACK_DISPLAY_MS = 1200;
 
-export function QuizScreen({ session, onAnswer, onQuit }: QuizScreenProps) {
+export function QuizScreen({ session, onAnswer, onSkip, onQuit }: QuizScreenProps) {
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [typedAnswer, setTypedAnswer] = useState('');
   const seenResultCount = useRef(0);
+  const askedIdSet = useMemo(() => new Set(session.askedIds), [session.askedIds]);
 
   // A new result landed (either mode) — flash brief correct/wrong feedback, then let it fade.
   // The underlying question has already advanced by the time this fires; the feedback is just
@@ -35,6 +37,13 @@ export function QuizScreen({ session, onAnswer, onQuit }: QuizScreenProps) {
     seenResultCount.current = session.results.length;
   }, [session.results]);
 
+  // Skipping swaps `current` without adding a result (the effect above only fires on an
+  // answer), so a typed-but-unsubmitted answer needs its own reset tied directly to which
+  // country is being asked about right now.
+  useEffect(() => {
+    setTypedAnswer('');
+  }, [session.current?.country.id]);
+
   const current = session.current;
   const totalInSession = session.pool.length;
   const questionNumber = session.askedIds.length + (current ? 1 : 0);
@@ -47,6 +56,7 @@ export function QuizScreen({ session, onAnswer, onQuit }: QuizScreenProps) {
     if (session.config.mode === 'typeIt' && current && feature.id === current.country.id) {
       return 'var(--map-target)';
     }
+    if (askedIdSet.has(feature.id)) return 'var(--map-answered)';
     return 'var(--map-land)';
   }
 
@@ -60,6 +70,8 @@ export function QuizScreen({ session, onAnswer, onQuit }: QuizScreenProps) {
     if (!current || feedback || !typedAnswer.trim()) return;
     onAnswer({ type: 'typeIt', submittedAnswer: typedAnswer });
   }
+
+  const canSkip = !!current && !feedback && session.remaining.length > 1;
 
   return (
     <div className="app">
@@ -107,6 +119,12 @@ export function QuizScreen({ session, onAnswer, onQuit }: QuizScreenProps) {
             Submit
           </button>
         </form>
+      )}
+
+      {current && (
+        <button type="button" className="quiz-skip" onClick={onSkip} disabled={!canSkip} title="Come back to this one later in the session">
+          Skip for now ⤼
+        </button>
       )}
     </div>
   );

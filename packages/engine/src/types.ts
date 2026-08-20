@@ -74,7 +74,13 @@ export interface QuizSessionState {
    * from the very first question. */
   pool: CountryDef[];
   askedIds: string[];
-  /** The question currently on screen — null once every question in `pool` has been asked. */
+  /** A mutable rotating queue of what's left to ask, separate from `pool`. Starts as a copy of
+   * `pool` and shrinks by one from the front on every answer — but `skipCurrent` (session.ts)
+   * can rotate its front entry to the back instead, so a skipped country comes back around
+   * later in the same session without disturbing `pool`'s fixed order/count, which is what
+   * progress display ("X of N") and the weighting logic rely on. */
+  remaining: CountryDef[];
+  /** The question currently on screen — null once `remaining` is empty. */
   current: QuizQuestion | null;
   results: QuizAnswerResult[];
   startedAt: number;

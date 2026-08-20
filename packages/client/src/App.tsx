@@ -38,6 +38,7 @@ export default function App() {
       <QuizScreen
         session={quiz.session}
         onAnswer={quiz.answer}
+        onSkip={quiz.skip}
         onQuit={() => {
           quiz.goHome();
           setScreen('home');

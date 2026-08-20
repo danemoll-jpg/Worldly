@@ -35,6 +35,7 @@ export function startSession(
     config,
     pool,
     askedIds: [],
+    remaining: [...pool],
     current: pool.length > 0 ? { country: pool[0], mode: config.mode } : null,
     results: [],
     startedAt: now,
@@ -60,17 +61,35 @@ export function submitAnswer(state: QuizSessionState, answer: Answer, now: numbe
     elapsedMs,
   };
 
-  const askedIds = [...state.askedIds, target.id];
-  const nextQuestion: QuizQuestion | null = state.pool[askedIds.length]
-    ? { country: state.pool[askedIds.length], mode: state.config.mode }
-    : null;
+  const remaining = state.remaining.slice(1);
+  const nextQuestion: QuizQuestion | null = remaining.length > 0 ? { country: remaining[0], mode: state.config.mode } : null;
 
   return {
     ...state,
-    askedIds,
+    askedIds: [...state.askedIds, target.id],
+    remaining,
     results: [...state.results, result],
     current: nextQuestion,
     questionStartedAt: nextQuestion ? now : null,
+  };
+}
+
+/** Defers the current question: sends it to the back of the queue instead of answering it, and
+ * presents whatever's now at the front instead. Not an answer — doesn't touch `askedIds` or
+ * `results`, so it has no effect on stats, scoring, or the session's percent-correct. A no-op
+ * when there's nothing else left to show instead (0 or 1 remaining), which also guarantees a
+ * session always terminates even if skip is mashed repeatedly. */
+export function skipCurrent(state: QuizSessionState, now: number = Date.now()): QuizSessionState {
+  if (!state.current || state.remaining.length <= 1) return state;
+
+  const [skipped, ...rest] = state.remaining;
+  const remaining = [...rest, skipped];
+
+  return {
+    ...state,
+    remaining,
+    current: { country: remaining[0], mode: state.config.mode },
+    questionStartedAt: now,
   };
 }
 

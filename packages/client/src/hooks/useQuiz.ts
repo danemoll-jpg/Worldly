@@ -7,6 +7,7 @@ import {
   QuizConfig,
   QuizSessionState,
   SessionSummary,
+  skipCurrent,
   StatsMap,
   startSession,
   submitAnswer,
@@ -179,6 +180,10 @@ export function useQuiz() {
     });
   }, []);
 
+  const skip = useCallback(() => {
+    setSession((prev) => (prev ? skipCurrent(prev) : prev));
+  }, []);
+
   const playAgain = useCallback(() => {
     if (config) start(config);
   }, [config, start]);
@@ -198,6 +203,7 @@ export function useQuiz() {
     personalBest,
     start,
     answer,
+    skip,
     playAgain,
     goHome,
     syncCode,

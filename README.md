@@ -9,10 +9,14 @@ middle ground between "quiz me on everything" and "quiz me on nothing" — you c
 the countries you keep missing.
 
 Includes:
-- A real **flat world map** — pan by dragging, zoom with the mouse wheel or a two-finger pinch
-  (works on touch devices, including iPad), reset-view button. Country boundaries are
-  public-domain data (Natural Earth, via the `world-atlas` package), not anything scraped or
-  licensed.
+- A real **flat world map**, sized to actually use the screen — pan by dragging, zoom with the
+  mouse wheel or a two-finger pinch (works on touch devices, including iPad), reset-view
+  button. Country boundaries are public-domain data (Natural Earth, via the `world-atlas`
+  package), not anything scraped or licensed.
+- **Tiny countries stay findable.** Vatican City, Liechtenstein, Monaco, San Marino, and a
+  couple dozen others are physically too small to reliably see or tap as their real shape at
+  any practical zoom — each gets a small marker dot at its centroid instead, a constant size on
+  screen no matter how far you're zoomed, so you're never hunting for an invisible sliver.
 - **Two quiz modes**: "find it" (you're told a country's name, tap it on the map) and "type
   it" (a country's highlighted, you type its name — untimed, and lenient about typos and
   alternate names like "USA" or "Czechia" vs. "Czech Republic").
@@ -20,6 +24,9 @@ Includes:
 - **Miss-weighted quizzing** — every session remembers what you've gotten wrong before and
   leans the question order toward it; a "just my weak spots" mode quizzes ONLY countries
   you've missed at least once, so you're never stuck choosing between the full 197 and nothing.
+- **Already-answered countries are marked on the map** as you go, so mid-quiz you can see at a
+  glance what's left. A **skip button** lets you set aside a question you're blanking on and
+  come back to it later in the same session, instead of being stuck staring at it or guessing.
 - A **mastery map** — the whole world colored by how solid you are on each country (new /
   struggling / shaky / solid), the payoff view for all that miss-tracking.
 - A **browse mode** — search or tap around the map with zero pressure, just to look something
@@ -58,11 +65,15 @@ country list itself.
 
 - Pick a quiz mode, which regions to include, and whether to cover everything or just your
   weak spots.
-- **Find it**: a country's named — tap it on the map.
+- **Find it**: a country's named — tap it on the map (a marker dot if it's one of the tiny
+  ones).
 - **Type it**: a country's highlighted on the map — type its name. No rush; typos and known
   alternate names are forgiven (see `packages/engine/src/matching.ts`).
 - Every country in your selected pool gets asked exactly once per session, in an order biased
-  toward whatever you've missed most before.
+  toward whatever you've missed most before. Countries you've already answered this session are
+  shaded differently on the map; hit **Skip for now** on one you're blanking on and it moves to
+  the back of the queue instead of being scored — it'll come back around before the session
+  ends (see `skipCurrent` in `packages/engine/src/session.ts`).
 - At the end: your percent correct, your time, and (if you beat a previous run at this exact
   setup) a "new best" badge.
 

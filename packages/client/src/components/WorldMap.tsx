@@ -72,6 +72,24 @@ export function WorldMap({ fillFor, onCountryTap, className }: WorldMapProps) {
               className={f.quizzable ? 'world-map__country' : 'world-map__country world-map__country--bg'}
             />
           ))}
+          {/* Tiny countries (Vatican City, Liechtenstein, Monaco, ...) render as slivers or
+              single points at any practical zoom level — a real path click target for them
+              would be sub-pixel. Instead, drop a small dot at each one's centroid and counter-
+              scale it by 1/transform.scale so it stays a constant, always-tappable size on
+              screen regardless of zoom, layered on top so it's never hidden by a larger
+              neighbor's fill. */}
+          {features.map((f, i) =>
+            f.isTiny ? (
+              <g key={`tiny-${i}`} transform={`translate(${f.centroid[0]} ${f.centroid[1]}) scale(${1 / transform.scale})`}>
+                <circle
+                  data-feature-index={i}
+                  r={4}
+                  fill={fillFor(f)}
+                  className={f.quizzable ? 'world-map__tiny-marker' : 'world-map__tiny-marker world-map__tiny-marker--bg'}
+                />
+              </g>
+            ) : null,
+          )}
         </g>
       </svg>
       <button type="button" className="world-map__reset" onClick={reset} title="Reset pan/zoom">

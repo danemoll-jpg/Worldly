@@ -14,6 +14,7 @@
   --map-target: #e0a458;
   --map-correct: #4caf7d;
   --map-wrong: #d64545;
+  --map-answered: #3f7a72;
 
   --mastery-new: #3a5a78;
   --mastery-struggling: #d64545;
@@ -309,7 +310,7 @@ button {
 
 .quiz-header {
   width: 100%;
-  max-width: 44rem;
+  max-width: min(96vw, 82rem);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -350,7 +351,8 @@ button {
 .world-map-wrap {
   position: relative;
   width: 100%;
-  max-width: 56rem;
+  max-width: min(96vw, 82rem);
+  max-height: 74vh;
   aspect-ratio: 960 / 500;
   background: var(--map-bg);
   border: 2px solid var(--accent);
@@ -401,6 +403,25 @@ button {
   stroke: rgba(15, 27, 45, 0.4);
 }
 
+.world-map__tiny-marker {
+  /* Constant screen-size dot (see WorldMap.tsx's counter-scaling transform) marking a country
+     too small to reliably see or tap as its real shape at any practical zoom level. */
+  stroke: rgba(10, 18, 32, 0.9);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+  cursor: pointer;
+  transition: fill 0.2s ease;
+}
+
+.world-map__tiny-marker:hover {
+  filter: brightness(1.15);
+}
+
+.world-map__tiny-marker--bg {
+  cursor: default;
+  opacity: 0.85;
+}
+
 .world-map__reset {
   position: absolute;
   bottom: 0.7rem;
@@ -448,6 +469,23 @@ button {
 
 .quiz-answer-form button:disabled {
   opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ---------- Skip button ---------- */
+
+.quiz-skip {
+  padding: 0.55rem 1.1rem;
+  border-radius: 999px;
+  border: 2px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.quiz-skip:disabled {
+  opacity: 0.4;
   cursor: not-allowed;
 }
 
