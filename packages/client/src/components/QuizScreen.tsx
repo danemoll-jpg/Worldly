@@ -98,13 +98,18 @@ export function QuizScreen({ session, onAnswer, onSkip, onQuit }: QuizScreenProp
             {feedback.result.correct ? '✅ Correct!' : `❌ That was ${COUNTRY_BY_ID[feedback.result.countryId]?.name}`}
           </span>
         ) : current ? (
-          session.config.mode === 'findIt' ? (
-            <span>
-              Find: <strong>{current.country.name}</strong>
-            </span>
-          ) : (
-            <span>What country is highlighted?</span>
-          )
+          <>
+            {session.config.mode === 'findIt' ? (
+              <span>
+                Find: <strong>{current.country.name}</strong>
+              </span>
+            ) : (
+              <span>What country is highlighted?</span>
+            )}
+            <button type="button" className="quiz-skip" onClick={onSkip} disabled={!canSkip} title="Come back to this one later in the session">
+              Skip for now ⤼
+            </button>
+          </>
         ) : null}
       </div>
 
@@ -127,12 +132,6 @@ export function QuizScreen({ session, onAnswer, onSkip, onQuit }: QuizScreenProp
             Submit
           </button>
         </form>
-      )}
-
-      {current && (
-        <button type="button" className="quiz-skip" onClick={onSkip} disabled={!canSkip} title="Come back to this one later in the session">
-          Skip for now ⤼
-        </button>
       )}
     </div>
   );

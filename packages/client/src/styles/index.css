@@ -336,7 +336,14 @@ button {
 }
 
 .quiz-prompt {
+  width: 100%;
+  max-width: min(96vw, 82rem);
   min-height: 1.8rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.6rem 0.9rem;
   font-size: 1.15rem;
   font-weight: 600;
   text-align: center;
@@ -550,13 +557,15 @@ button {
 /* ---------- Skip button ---------- */
 
 .quiz-skip {
-  padding: 0.55rem 1.1rem;
+  /* Sits right next to the prompt text (see .quiz-prompt), not down by the map — sized a
+     notch smaller than a full action button so it reads as "secondary" next to the question. */
+  padding: 0.35rem 0.85rem;
   border-radius: 999px;
   border: 2px solid var(--accent);
   background: transparent;
   color: var(--accent);
   font-weight: 600;
-  font-size: 0.9rem;
+  font-size: 0.8rem;
 }
 
 .quiz-skip:disabled {
