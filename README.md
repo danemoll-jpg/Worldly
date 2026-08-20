@@ -27,8 +27,10 @@ Includes:
 - **Session stats** — completion time and percent correct, shown on the summary screen with a
   "new best" badge when you beat your own record for that exact quiz setup. Recorded, never a
   gate.
-- Entirely **local** — no account, no server, no bots or opponents (this is a solo study tool,
-  not a game against anyone). Everything's stored in your browser's localStorage.
+- No bots, no opponents — this is a solo study tool, not a game against anyone. Works entirely
+  locally (localStorage) with zero setup; optionally, **sync your stats and history across your
+  own devices** with a shared code — no account, same "the code is the access control" trust
+  model as the online rooms in the rest of this series (see "Deploying" below to turn it on).
 
 ## Quick start
 
@@ -78,8 +80,9 @@ packages/
             - Country boundary data (src/lib/geo.ts) is projected once with d3-geo
               (Natural Earth 1 projection) and cached for the page's lifetime.
             - Per-country stats and session history persist to localStorage
-              (src/lib/storage.ts) — see hooks/useQuiz.ts for how a session ties the engine,
-              storage, and UI together.
+              (src/lib/storage.ts) by default, or to a shared Firestore document once
+              cross-device sync is turned on (src/network/sync.ts) — see hooks/useQuiz.ts for
+              how a session ties the engine, storage, sync, and UI together.
 ```
 
 ## The country list — what's in, what's out, and why
@@ -113,13 +116,41 @@ individual ring whose bounds are implausibly large (wider than ~75% of the map A
 gets dropped rather than rendered. Worth knowing about if this ever needs revisiting for a
 different resolution/version of the underlying data.
 
+## Cross-device sync
+
+Optional, and purely additive — everything above works with zero setup either way. Turn it on
+from the home screen ("Sync devices"):
+
+- **Start syncing** generates a short code and seeds a shared Firestore document with whatever
+  stats/history are already on this device.
+- **I have a code** connects another device to that same code — the two devices' progress is
+  merged once (summed, not overwritten, so neither side loses anything), and from then on both
+  read/write the same shared copy. A session finished on one device shows up on the other
+  automatically (a live Firestore subscription, not a manual refresh).
+- **Disconnect** just stops this device from syncing — it keeps using its last-known data
+  purely locally afterward; nothing is deleted, on this device or in the cloud.
+
+There's no account system anywhere in this series — the code itself is the only thing tying
+your devices together, same trust model as an online room code. See `firestore.rules`' comments
+for the accepted tradeoff that comes with that (fine for a personal study log; not a guarantee
+against a determined attacker).
+
 ## Deploying
 
-Static site, no backend, no environment variables. `npm run build` (root) builds the engine,
-then the client to `packages/client/dist`. Host that directory anywhere that serves static
-files — Netlify, Vercel, GitHub Pages, Cloudflare Pages, all work with zero server-side config.
-This repo's `netlify.toml` already has the build command and publish directory set for Netlify
-specifically — just "Import from Git" and deploy.
+1. **Static site build**: `npm run build` (root) builds the engine, then the client to
+   `packages/client/dist`. Host that directory anywhere that serves static files — Netlify,
+   Vercel, GitHub Pages, Cloudflare Pages, all work with zero server-side config. This repo's
+   `netlify.toml` already has the build command and publish directory set for Netlify
+   specifically — just "Import from Git" and deploy. This alone gets you the whole app, sync
+   included in the UI — it just won't successfully connect until the next step is done.
+2. **Firebase (only needed for cross-device sync)**: create a project at
+   [console.firebase.google.com](https://console.firebase.google.com), enable **Firestore**
+   (Standard edition). In Project Settings → General → Your apps, add a Web app and copy its
+   config object into `packages/client/src/network/firebase.ts` (it currently has
+   `REPLACE_ME` placeholders). Then paste this repo's `firestore.rules` into
+   Firestore → Rules → Publish. No environment variables needed at build time — the Firebase
+   web config isn't a secret (access control is enforced by `firestore.rules`, not by hiding
+   the config), so it just gets committed directly in `firebase.ts` once filled in.
 
 ## Extending this later
 

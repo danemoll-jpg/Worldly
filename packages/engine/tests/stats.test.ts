@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyResultToStats, applySessionToStats, masteryLevel } from '../src/stats.js';
+import { applyResultToStats, applySessionToStats, masteryLevel, mergeStatsMaps } from '../src/stats.js';
 import { QuizAnswerResult, StatsMap } from '../src/types.js';
 
 describe('applyResultToStats', () => {
@@ -32,6 +32,33 @@ describe('applySessionToStats', () => {
     const stats = applySessionToStats({}, results, 100);
     expect(stats.fr).toEqual({ countryId: 'fr', seen: 2, missed: 1, lastSeenAt: 100 });
     expect(stats.de).toEqual({ countryId: 'de', seen: 1, missed: 1, lastSeenAt: 100 });
+  });
+});
+
+describe('mergeStatsMaps', () => {
+  it('sums seen/missed for a country present on both sides', () => {
+    const a: StatsMap = { fr: { countryId: 'fr', seen: 3, missed: 1, lastSeenAt: 100 } };
+    const b: StatsMap = { fr: { countryId: 'fr', seen: 2, missed: 2, lastSeenAt: 200 } };
+    const merged = mergeStatsMaps(a, b);
+    expect(merged.fr).toEqual({ countryId: 'fr', seen: 5, missed: 3, lastSeenAt: 200 });
+  });
+
+  it('keeps a country present on only one side untouched', () => {
+    const a: StatsMap = { fr: { countryId: 'fr', seen: 3, missed: 1, lastSeenAt: 100 } };
+    const b: StatsMap = { de: { countryId: 'de', seen: 1, missed: 0, lastSeenAt: 50 } };
+    const merged = mergeStatsMaps(a, b);
+    expect(merged.fr).toEqual(a.fr);
+    expect(merged.de).toEqual(b.de);
+  });
+
+  it('takes the later lastSeenAt regardless of which side it came from', () => {
+    const a: StatsMap = { fr: { countryId: 'fr', seen: 1, missed: 0, lastSeenAt: 500 } };
+    const b: StatsMap = { fr: { countryId: 'fr', seen: 1, missed: 0, lastSeenAt: 100 } };
+    expect(mergeStatsMaps(a, b).fr.lastSeenAt).toBe(500);
+  });
+
+  it('is empty when both sides are empty', () => {
+    expect(mergeStatsMaps({}, {})).toEqual({});
   });
 });
 

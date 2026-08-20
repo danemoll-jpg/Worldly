@@ -1,12 +1,18 @@
 import { GAME_HUB_URL } from '../lib/hub';
+import { SyncStatus } from '../hooks/useQuiz';
 
 interface HomeScreenProps {
   onStartQuiz: () => void;
   onBrowse: () => void;
   onMasteryMap: () => void;
+  onSync: () => void;
+  syncStatus: SyncStatus;
+  syncCode: string | null;
 }
 
-export function HomeScreen({ onStartQuiz, onBrowse, onMasteryMap }: HomeScreenProps) {
+export function HomeScreen({ onStartQuiz, onBrowse, onMasteryMap, onSync, syncStatus, syncCode }: HomeScreenProps) {
+  const synced = syncStatus === 'synced' && !!syncCode;
+
   return (
     <div className="start-screen">
       <a className="back-link back-link--floating" href={GAME_HUB_URL}>
@@ -34,6 +40,13 @@ export function HomeScreen({ onStartQuiz, onBrowse, onMasteryMap }: HomeScreenPr
             <span className="home-screen__choice-emoji">🗺️</span>
             <span className="home-screen__choice-title">Mastery map</span>
             <span className="home-screen__choice-sub">See the whole world colored by how solid you are on each country.</span>
+          </button>
+          <button type="button" className="home-screen__choice" onClick={onSync}>
+            <span className="home-screen__choice-emoji">🔄</span>
+            <span className="home-screen__choice-title">Sync devices</span>
+            <span className="home-screen__choice-sub">
+              {synced ? `Synced · code ${syncCode}` : 'Keep stats the same across your devices.'}
+            </span>
           </button>
         </div>
       </div>

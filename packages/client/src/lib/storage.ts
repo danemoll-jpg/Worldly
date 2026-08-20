@@ -1,11 +1,14 @@
 // localStorage-backed persistence — everything here is a thin read/write layer around plain
 // data the engine already knows how to compute (StatsMap, SessionSummary); no logic lives
 // here beyond "load it," "save it," and "what's the best result on record for this config."
+// Doubles as the local cache/fallback once cross-device sync is on (see network/sync.ts) —
+// synced state is mirrored here too, so a reload shows something instantly instead of a blank
+// screen while the live Firestore subscription catches up.
 import { StatsMap } from '@worldly/engine';
 
 const STATS_KEY = 'worldlyStats';
 const HISTORY_KEY = 'worldlySessionHistory';
-const MAX_HISTORY = 200;
+export const MAX_HISTORY = 200;
 
 export function loadStats(): StatsMap {
   try {
@@ -26,6 +29,9 @@ export function saveStats(stats: StatsMap): void {
 }
 
 export interface SessionRecord {
+  /** Unique per record — lets history merge across devices (see network/sync.ts) dedupe
+   * reliably instead of guessing from completedAt alone. */
+  id: string;
   completedAt: number;
   mode: 'findIt' | 'typeIt';
   scope: 'all' | 'weakSpots';
@@ -38,6 +44,10 @@ export interface SessionRecord {
   totalElapsedMs: number;
 }
 
+export function newSessionRecordId(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
 export function loadHistory(): SessionRecord[] {
   try {
     const raw = localStorage.getItem(HISTORY_KEY);
@@ -47,14 +57,29 @@ export function loadHistory(): SessionRecord[] {
   }
 }
 
-export function appendHistory(record: SessionRecord): SessionRecord[] {
-  const history = [record, ...loadHistory()].slice(0, MAX_HISTORY);
+export function saveHistory(history: SessionRecord[]): void {
   try {
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, MAX_HISTORY)));
   } catch {
     // ignore — see saveStats
   }
+}
+
+export function appendHistory(record: SessionRecord): SessionRecord[] {
+  const history = [record, ...loadHistory()].slice(0, MAX_HISTORY);
+  saveHistory(history);
   return history;
+}
+
+/** Unions two independently-grown history lists (same one-time use as the engine's
+ * mergeStatsMaps — see that function's doc comment), deduped by id, newest first, capped to
+ * the usual history limit. */
+export function mergeHistory(a: SessionRecord[], b: SessionRecord[]): SessionRecord[] {
+  const byId = new Map<string, SessionRecord>();
+  for (const record of [...a, ...b]) byId.set(record.id, record);
+  return Array.from(byId.values())
+    .sort((x, y) => y.completedAt - x.completedAt)
+    .slice(0, MAX_HISTORY);
 }
 
 export interface PersonalBest {
