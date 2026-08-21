@@ -167,9 +167,29 @@ export function usePanZoom(
 
   const reset = useCallback(() => setTransform(IDENTITY_TRANSFORM), []);
 
+  /** Programmatically centers `point` (viewBox units) in the middle of the visible area at
+   * `scale` — unlike the wheel/pinch handlers, which zoom AROUND a fixed anchor point to keep
+   * it visually stationary, this recenters outright: used for "jump to this country" (see
+   * WorldMap's focusCountryId), where the whole point is to bring a specific spot into view,
+   * not to preserve whatever's currently on screen. Still a normal, user-draggable/zoomable
+   * transform afterward — this only sets the STARTING view for whatever triggered it. */
+  const focusOn = useCallback(
+    (point: { x: number; y: number }, scale: number) => {
+      const clampedScale = clampScale(scale);
+      const next: Transform = {
+        scale: clampedScale,
+        x: viewBox.width / 2 - point.x * clampedScale,
+        y: viewBox.height / 2 - point.y * clampedScale,
+      };
+      setTransform(clampPan(next, viewBox));
+    },
+    [viewBox],
+  );
+
   return {
     transform,
     reset,
+    focusOn,
     handlers: { onPointerDown, onPointerMove, onPointerUp, onPointerCancel: onPointerUp, onWheel },
   };
 }

@@ -11,6 +11,12 @@ interface WorldMapProps {
    * including background-only territories; the caller decides whether to act on
    * `feature.quizzable`. Also fires for taps inside an inset box (see geo.ts's INSET_GROUPS). */
   onCountryTap?: (feature: MapFeature) => void;
+  /** When set (and changes to a new id), the map auto-pans/zooms to center that country —
+   * "quickly see where the thing you're guessing actually is," for quiz modes where the
+   * country's identity isn't itself the secret (see QuizScreen's revealsLocationOnMap). Purely
+   * an initial view: the player can still freely pan/zoom away afterward, same as any other
+   * transform change. Ignored (no-op) for an id the map has no feature for. */
+  focusCountryId?: string | null;
   className?: string;
 }
 
@@ -21,12 +27,17 @@ const INSET_POSITION: Record<string, 'top-left' | 'top-right'> = {
   'caribbean-states': 'top-right',
 };
 
+/** How far to zoom in when auto-focusing on a country — moderate on purpose: enough to make a
+ * small country legible and unambiguous among its neighbors, but not so far that it crops away
+ * the surrounding context that actually helps you place it (which is the whole point here). */
+const AUTO_FOCUS_SCALE = 4;
+
 /** The core reusable map surface — flat, pannable, zoomable (mouse wheel, drag, or two-finger
  * pinch/pan on touch), shared by the quiz screens and the mastery map. Doesn't know anything
  * about quiz state; it's purely "here are shapes, here's how to color them, tell me what got
  * tapped." Map data loads asynchronously (see lib/geo.ts) and is cached after the first load,
  * so every screen after the first shows it instantly. */
-export function WorldMap({ fillFor, onCountryTap, className }: WorldMapProps) {
+export function WorldMap({ fillFor, onCountryTap, focusCountryId, className }: WorldMapProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [features, setFeatures] = useState<MapFeature[] | null>(null);
   const [insets, setInsets] = useState<Inset[]>([]);
@@ -58,7 +69,14 @@ export function WorldMap({ fillFor, onCountryTap, className }: WorldMapProps) {
     if (feature) onCountryTap(feature);
   }
 
-  const { transform, reset, handlers } = usePanZoom(svgRef, MAP_VIEWBOX, handleTap);
+  const { transform, reset, focusOn, handlers } = usePanZoom(svgRef, MAP_VIEWBOX, handleTap);
+
+  useEffect(() => {
+    if (!focusCountryId) return;
+    const feature = featureById.get(focusCountryId);
+    if (!feature) return;
+    focusOn({ x: feature.centroid[0], y: feature.centroid[1] }, AUTO_FOCUS_SCALE);
+  }, [focusCountryId, featureById, focusOn]);
 
   if (!features) {
     return (

@@ -92,16 +92,21 @@ export function QuizScreen({ session, onAnswer, onSkip, onQuit, onRestart }: Qui
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [current?.country.id, mode],
   );
+  // Safe to show WHERE the target is exactly when its identity isn't the thing being guessed:
+  // findIt's whole mechanic IS finding it on the map, so that stays hidden regardless of
+  // category; category 'flag'/'capital' hide it too, since seeing the location would just hand
+  // over the country's identity for free. continent mode always qualifies regardless of
+  // category — it already shows the plain country name no matter what `category` happens to be
+  // set to (see promptLead), and seeing the shape/location is a legitimate, intended way to
+  // help place its continent, not an accidental leak.
+  const revealsLocationOnMap = mode === 'continent' || (mode !== 'findIt' && category === 'country');
 
   function fillFor(feature: MapFeature): string {
     if (!feature.quizzable) return 'var(--map-bg)';
     if (feedback && feature.id === feedback.result.countryId) {
       return feedback.result.correct ? 'var(--map-correct)' : 'var(--map-wrong)';
     }
-    // Highlighting the target country on the map is only safe when the prompt is the country's
-    // own name — for a flag/capital prompt (or continent mode, which always uses this same
-    // fillFor) that highlight would just hand over the answer for free.
-    if (mode === 'typeIt' && category === 'country' && current && feature.id === current.country.id) {
+    if (revealsLocationOnMap && current && feature.id === current.country.id) {
       return 'var(--map-target)';
     }
     const priorResult = resultByCountry.get(feature.id);
@@ -221,7 +226,7 @@ export function QuizScreen({ session, onAnswer, onSkip, onQuit, onRestart }: Qui
         ) : null}
       </div>
 
-      <WorldMap fillFor={fillFor} onCountryTap={handleMapTap} />
+      <WorldMap fillFor={fillFor} onCountryTap={handleMapTap} focusCountryId={revealsLocationOnMap ? (current?.country.id ?? null) : null} />
 
       {mode === 'typeIt' && current && (
         <form className="quiz-answer-form" onSubmit={handleTypeSubmit}>
