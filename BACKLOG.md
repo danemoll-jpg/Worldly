@@ -43,7 +43,7 @@ _(nothing currently open — everything below is either shipped or deliberately 
   Added as its own `QuizMode` ('multipleChoice'): same prompt as findIt (crosses with `category`
   the same way), 4 buttons (target + up to 3 random distractors from the session's own pool),
   answered with the same `{ type: 'findIt' }` Answer findIt itself uses — no engine changes
-  needed beyond the mode value. Commit `dcc48b3` (also fixed a feedback-timing bug found while
+  needed beyond the mode value. Commit `e6e8418` (also fixed a feedback-timing bug found while
   building it: submitAnswer advances `current` to the NEXT question in the same update that adds
   the result, so naively deriving "which button was right" from live state during the feedback
   flash showed the wrong question's answer — fixed by freezing the answered question's own
