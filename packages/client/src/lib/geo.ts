@@ -60,6 +60,17 @@ export const MAP_VIEWBOX = { width: 960, height: 500 };
  * gap in the real distribution right around here, not an arbitrary round number. */
 const TINY_PRIMARY_DIMENSION = 2.2;
 
+/** Countries whose real shape defeats the bounding-box heuristic above even though their
+ * primary piece's dimension alone doesn't clear TINY_PRIMARY_DIMENSION — an elongated, jagged,
+ * or mostly-hollow shape can have a bounding box several times bigger than the land actually
+ * inside it, so "is the box small" understates how hard the real outline is to hit. Verified
+ * directly rather than guessed: even at the map's max zoom (10x), Palestine's West Bank piece
+ * (bbox ~1.7×3.7 units — comfortably over the 2.2 threshold) still renders as a sliver only a
+ * a few CSS pixels wide, no easier to tap precisely than Vatican City. No other tiny-marker
+ * country sits anywhere near it, so giving it the same marker/tap-radius treatment can't create
+ * a marker-overlap conflict (see tapRadiusFor below). */
+const FORCE_TINY_IDS = new Set(['275']); // Palestine
+
 /** Bounds on the adaptive tap radius (see MapFeature.tapRadius): MIN is deliberately bigger
  * than the marker's own visible-dot radius (see WorldMap.tsx) — a hit radius smaller than the
  * dot itself would add nothing, since the dot already sits on top and catches those taps. MAX
@@ -401,7 +412,8 @@ async function loadMapData(): Promise<MapData> {
     const centroid: [number, number] = r.primaryBounds
       ? [(r.primaryBounds[0] + r.primaryBounds[2]) / 2, (r.primaryBounds[1] + r.primaryBounds[3]) / 2]
       : [0, 0];
-    return { ...r, centroid, isTiny: r.quizzable && groupDimension < TINY_PRIMARY_DIMENSION };
+    const isTiny = r.quizzable && (groupDimension < TINY_PRIMARY_DIMENSION || FORCE_TINY_IDS.has(r.id));
+    return { ...r, centroid, isTiny };
   });
 
   // Adaptive tap radius: for each tiny country that still gets a marker on the main map (i.e.
