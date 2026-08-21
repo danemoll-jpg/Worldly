@@ -173,14 +173,5 @@ against a determined attacker).
 
 ## Extending this later
 
-The v1 scope deliberately left a few ideas for later, all discussed as natural extensions of
-the existing data/architecture rather than new categories of work:
-- **More quiz categories** using the same country data: flags (matching a flag to a name),
-  capitals, or "which continent is this in."
-- **A hint system** for the quiz — "reveal the continent" or "show the first letter" — same
-  spirit as the hint buttons in the rest of this games series, just without a bot/opponent to
-  base it on.
-- **A daily challenge** — one deterministic country/flag per day (seed off the date), a low-
-  effort engagement hook.
-- **An atlas/detail panel** in browse mode with real facts (population, capital, language) once
-  that metadata is worth adding to `countries.ts`.
+Ideas discussed and deliberately deferred rather than built into v1 — see
+[BACKLOG.md](./BACKLOG.md) for the current list and what's already shipped since.
