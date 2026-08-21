@@ -57,6 +57,13 @@ export function SetupScreen({ stats, onBack, onStart }: SetupScreenProps) {
             <button type="button" className={mode === 'typeIt' ? 'active' : ''} onClick={() => setMode('typeIt')}>
               Type its name
             </button>
+            <button
+              type="button"
+              className={mode === 'multipleChoice' ? 'active' : ''}
+              onClick={() => setMode('multipleChoice')}
+            >
+              Multiple choice
+            </button>
             <button type="button" className={mode === 'continent' ? 'active' : ''} onClick={() => setMode('continent')}>
               Guess the continent
             </button>
@@ -66,7 +73,9 @@ export function SetupScreen({ stats, onBack, onStart }: SetupScreenProps) {
               ? "You'll be told a country and tap it on the map."
               : mode === 'typeIt'
                 ? "A country will be highlighted on the map and you'll type its name — untimed, and typos are forgiven."
-                : "You'll see a country's name and pick which of the 6 continents it's in — the gentlest mode, good for a quick warm-up."}
+                : mode === 'multipleChoice'
+                  ? 'Same prompt as Find it, but you pick from 4 name buttons instead of hunting the map — a gentler recognition mode than free recall.'
+                  : "You'll see a country's name and pick which of the 6 continents it's in — the gentlest mode, good for a quick warm-up."}
           </span>
         </label>
 

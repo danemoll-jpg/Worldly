@@ -13,7 +13,8 @@ export function formatDuration(ms: number): string {
  * where every row IS a distinct config, so this is the only thing telling two rows apart.
  * `category` is ignored for 'continent' mode (it doesn't apply there — see QuizConfig). */
 export function describeConfig(mode: QuizMode, category: QuizCategory, scope: 'all' | 'weakSpots', continentsKey: string): string {
-  const modeLabel = mode === 'findIt' ? 'Find it' : mode === 'typeIt' ? 'Type it' : 'Continents';
+  const modeLabel =
+    mode === 'findIt' ? 'Find it' : mode === 'typeIt' ? 'Type it' : mode === 'multipleChoice' ? 'Multiple choice' : 'Continents';
   const categoryLabel = mode === 'continent' || category === 'country' ? '' : ` (${category === 'flag' ? 'flags' : 'capitals'})`;
   const scopeLabel = scope === 'weakSpots' ? 'weak spots only' : 'everything';
   const regionLabel = continentsKey === 'all' ? 'all regions' : continentsKey.split(',').join(', ');

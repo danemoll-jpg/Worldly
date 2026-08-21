@@ -14,14 +14,6 @@ just forgotten.
 
 _(nothing currently open — everything below is either shipped or deliberately not planned)_
 
-## Not planned as separate work
-
-- **Multiple-choice vs. type-the-name toggle** — came up as its own idea, but Worldly's existing
-  `findIt` (recognize it on the map) / `typeIt` (recall and type it) modes already are that
-  distinction — a gentler recognition mode and a harder recall mode, both available as a toggle.
-  Not tracked as a separate open item unless there's a reason the map-tap version doesn't cover
-  what was actually wanted (e.g. a plain 4-option text list instead of the map).
-
 ## Done
 
 - **Mastery map** — coloring every country by how well you know it (miss ratio → new/struggling/
@@ -45,3 +37,14 @@ _(nothing currently open — everything below is either shipped or deliberately 
   capital(s), and languages. Deliberately NOT population — see `countries.ts`'s header comment;
   the `world-countries` data source doesn't carry it, and hand-typing/guessing 197 numbers that
   go stale immediately wasn't worth it for a quick reference. Commits `bf45b38`, `437fe19`.
+- **Multiple-choice mode** — first marked "not planned as separate work" on the assumption that
+  findIt (map-tap) already covered the "gentler recognition mode" idea; that was wrong — what
+  was actually wanted was a genuine 4-option button pick, separate from hunting the full map.
+  Added as its own `QuizMode` ('multipleChoice'): same prompt as findIt (crosses with `category`
+  the same way), 4 buttons (target + up to 3 random distractors from the session's own pool),
+  answered with the same `{ type: 'findIt' }` Answer findIt itself uses — no engine changes
+  needed beyond the mode value. Commit `dcc48b3` (also fixed a feedback-timing bug found while
+  building it: submitAnswer advances `current` to the NEXT question in the same update that adds
+  the result, so naively deriving "which button was right" from live state during the feedback
+  flash showed the wrong question's answer — fixed by freezing the answered question's own
+  options/correct-id at pick-time instead of re-deriving them live).

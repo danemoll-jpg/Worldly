@@ -625,9 +625,9 @@ button {
   vertical-align: middle;
 }
 
-/* ---------- Continent mode ---------- */
+/* ---------- Choice grid (continent mode + multiple choice) ---------- */
 
-.quiz-continent-choices {
+.quiz-choice-grid {
   width: 100%;
   max-width: 30rem;
   display: grid;
@@ -635,7 +635,7 @@ button {
   gap: 0.6rem;
 }
 
-.quiz-continent-choices button {
+.quiz-choice-grid button {
   padding: 0.8rem;
   border-radius: 0.6rem;
   border: 2px solid var(--accent);
@@ -645,9 +645,23 @@ button {
   font-size: 0.95rem;
 }
 
-.quiz-continent-choices button:disabled {
+.quiz-choice-grid button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.quiz-choice--correct {
+  /* Overrides the disabled-state opacity above — the right answer should read clearly even
+     while every button in the grid is disabled during the feedback flash. */
+  border-color: var(--good-green) !important;
+  background: rgba(76, 175, 125, 0.25) !important;
+  opacity: 1 !important;
+}
+
+.quiz-choice--wrong {
+  border-color: var(--danger-red) !important;
+  background: rgba(214, 69, 69, 0.25) !important;
+  opacity: 1 !important;
 }
 
 /* ---------- Lookup screen ---------- */

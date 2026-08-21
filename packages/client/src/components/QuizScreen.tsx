@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Answer, Continent, CONTINENTS, COUNTRY_BY_ID, QuizAnswerResult, QuizSessionState } from '@worldly/engine';
+import { Answer, Continent, CONTINENTS, CountryDef, COUNTRY_BY_ID, QuizAnswerResult, QuizSessionState } from '@worldly/engine';
 import { ConfirmDialog } from './ConfirmDialog';
 import { promptFor } from '../lib/format';
 import { MapFeature } from '../lib/geo';
@@ -21,12 +21,32 @@ interface Feedback {
 }
 
 const FEEDBACK_DISPLAY_MS = 1200;
+const MULTIPLE_CHOICE_OPTION_COUNT = 4;
+
+/** Picks the target plus up to 3 random distractors from the rest of the session's own pool
+ * (so distractors are always relevant to whatever region/scope was chosen), shuffled together.
+ * Falls back to fewer than 4 options gracefully — a heavily filtered quiz (one continent) can
+ * legitimately have fewer than 4 countries in it at all. */
+function pickChoices(target: CountryDef, pool: CountryDef[]): CountryDef[] {
+  const others = pool.filter((c) => c.id !== target.id);
+  const distractorCount = Math.min(MULTIPLE_CHOICE_OPTION_COUNT - 1, others.length);
+  const shuffled = [...others].sort(() => Math.random() - 0.5);
+  const options = [target, ...shuffled.slice(0, distractorCount)];
+  return options.sort(() => Math.random() - 0.5);
+}
 
 export function QuizScreen({ session, onAnswer, onSkip, onQuit, onRestart }: QuizScreenProps) {
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [typedAnswer, setTypedAnswer] = useState('');
   const [confirmingRestart, setConfirmingRestart] = useState(false);
   const [hintRevealed, setHintRevealed] = useState(false);
+  // Captured at the moment a multiple-choice button is picked, not derived live from
+  // `session.current` — by the time feedback for THIS answer is visible, `submitAnswer` has
+  // already advanced `current` to the NEXT question (same state update, see the effect below),
+  // so deriving "which button was right" from the live current/choices would show the WRONG
+  // question's answer highlighted during the very feedback flash that's naming a different one.
+  // Freezing exactly what was on screen at pick-time sidesteps that race entirely.
+  const [answeredChoice, setAnsweredChoice] = useState<{ options: CountryDef[]; correctId: string; pickedId: string } | null>(null);
   const seenResultCount = useRef(0);
   // Correctness per already-answered country this session — each country is asked at most
   // once, so this is a plain 1:1 map, not a running tally.
@@ -65,6 +85,13 @@ export function QuizScreen({ session, onAnswer, onSkip, onQuit, onRestart }: Qui
   const questionNumber = session.askedIds.length + (current ? 1 : 0);
   const { mode, category } = session.config;
   const prompt = current ? promptFor(category, current.country) : null;
+  // Recomputed only when the question actually changes, not on every render (e.g. the feedback
+  // flash) — otherwise the 4 buttons would visibly reshuffle themselves right after answering.
+  const choices = useMemo(
+    () => (current && mode === 'multipleChoice' ? pickChoices(current.country, session.pool) : []),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [current?.country.id, mode],
+  );
 
   function fillFor(feature: MapFeature): string {
     if (!feature.quizzable) return 'var(--map-bg)';
@@ -99,6 +126,12 @@ export function QuizScreen({ session, onAnswer, onSkip, onQuit, onRestart }: Qui
     onAnswer({ type: 'continent', selectedContinent: continent });
   }
 
+  function handleChoicePick(countryId: string) {
+    if (!current || feedback) return;
+    setAnsweredChoice({ options: choices, correctId: current.country.id, pickedId: countryId });
+    onAnswer({ type: 'findIt', clickedCountryId: countryId });
+  }
+
   const canSkip = !!current && !feedback && session.remaining.length > 1;
   // Continent mode is already a 6-way multiple choice — a hint would barely make it easier, so
   // it's only offered for findIt/typeIt, where a "just guessing" moment is a real possibility.
@@ -114,10 +147,13 @@ export function QuizScreen({ session, onAnswer, onSkip, onQuit, onRestart }: Qui
     }
     if (!prompt) return null;
 
-    // findIt: always "find the country [that has/matching] X on the map". typeIt: always
-    // "what country [has/matches] X" — 'country' category keeps its original, simpler v1
-    // phrasing (no "matching" framing needed when the prompt already IS the country's name).
-    if (mode === 'findIt') {
+    // findIt and multipleChoice share the exact same prompt wording — "find" reads fine whether
+    // the answer comes from tapping the map or tapping a button, and keeping the copy identical
+    // means switching between them (in setup) never looks like a different question. typeIt
+    // below is worded as "what country [has/matches] X" — 'country' category keeps its
+    // original, simpler v1 phrasing (no "matching" framing needed when the prompt already IS
+    // the country's name).
+    if (mode === 'findIt' || mode === 'multipleChoice') {
       if (category === 'country') {
         return (
           <span>
@@ -207,12 +243,32 @@ export function QuizScreen({ session, onAnswer, onSkip, onQuit, onRestart }: Qui
       )}
 
       {mode === 'continent' && current && (
-        <div className="quiz-continent-choices">
+        <div className="quiz-choice-grid">
           {CONTINENTS.map((c) => (
             <button key={c} type="button" disabled={!!feedback} onClick={() => handleContinentPick(c)}>
               {c}
             </button>
           ))}
+        </div>
+      )}
+
+      {mode === 'multipleChoice' && current && (
+        <div className="quiz-choice-grid">
+          {/* While feedback for the just-answered question is showing, render ITS frozen
+              options/correct-id (answeredChoice) instead of the live `choices`/`current` for
+              the question that's already been advanced to underneath — see answeredChoice's
+              declaration for why. */}
+          {(feedback && answeredChoice ? answeredChoice.options : choices).map((country) => {
+            const correctId = feedback && answeredChoice ? answeredChoice.correctId : current.country.id;
+            const isCorrectAnswer = !!feedback && country.id === correctId;
+            const isWrongPick = !!feedback && !!answeredChoice && country.id === answeredChoice.pickedId && !feedback.result.correct;
+            const className = isCorrectAnswer ? 'quiz-choice--correct' : isWrongPick ? 'quiz-choice--wrong' : '';
+            return (
+              <button key={country.id} type="button" className={className} disabled={!!feedback} onClick={() => handleChoicePick(country.id)}>
+                {country.name}
+              </button>
+            );
+          })}
         </div>
       )}
 

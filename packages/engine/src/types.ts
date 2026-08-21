@@ -32,11 +32,17 @@ export interface CountryDef {
 
 /** 'findIt': the country's named (or shown via `category` — see below), the player clicks/taps
  * it on the map. 'typeIt': the country's highlighted on the map, the player types its name —
- * untimed, leniently matched (see matching.ts). 'continent': the country's named, the player
- * picks which of the 6 continents it's in from a short button list — genuinely different from
- * the other two (the answer is a continent, not a country), so it doesn't cross with `category`
- * the way findIt/typeIt do; a continent question always shows the plain country name. */
-export type QuizMode = 'findIt' | 'typeIt' | 'continent';
+ * untimed, leniently matched (see matching.ts). 'multipleChoice': same prompt as findIt, but
+ * answered by picking one of 4 country-name buttons instead of tapping the map — a gentler
+ * recognition mode than findIt (searching a full map of ~200 shapes) without going all the way
+ * to typeIt's free recall. Answered with the exact same `{ type: 'findIt' }` Answer as findIt —
+ * picking a button and tapping the right shape on the map mean the same thing to the engine, so
+ * this needed no new Answer variant, just a new way for the CLIENT to collect one. 'continent':
+ * the country's named, the player picks which of the 6 continents it's in from a short button
+ * list — genuinely different from the other three (the answer is a continent, not a country),
+ * so it doesn't cross with `category` the way the others do; a continent question always shows
+ * the plain country name. */
+export type QuizMode = 'findIt' | 'typeIt' | 'multipleChoice' | 'continent';
 
 /** What's shown as the prompt for findIt/typeIt — the thing being asked about is always still
  * "which country is this", just presented a different way: 'country' (the name, the original
