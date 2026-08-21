@@ -62,13 +62,21 @@ export type QuizScope = 'all' | 'weakSpots';
 
 export interface QuizConfig {
   mode: QuizMode;
-  /** Always present, but only meaningful when `mode` is 'findIt' or 'typeIt' — ignored for
-   * 'continent'. Defaults to 'country' (the original v1 prompt) wherever a config is built
-   * without deliberately choosing something else. */
+  /** Always present, but only meaningful when `mode` is 'findIt', 'typeIt', or
+   * 'multipleChoice' — ignored for 'continent'. Defaults to 'country' (the original v1 prompt)
+   * wherever a config is built without deliberately choosing something else. */
   category: QuizCategory;
+  /** Always present, but only meaningful when `mode` is 'multipleChoice' — ignored everywhere
+   * else. 'easy': the 3 wrong options are random other countries from the pool. 'hard': they're
+   * deliberately picked to be confusable — same continent as the target and/or similarly-spelled
+   * names (Niger/Nigeria, Slovakia/Slovenia, Austria/Australia, ...), a genuinely harder pick
+   * than plain random ever produces. See the client's pickChoices for the actual selection. */
+  multipleChoiceDifficulty: MultipleChoiceDifficulty;
   continents: Continent[] | 'all';
   scope: QuizScope;
 }
+
+export type MultipleChoiceDifficulty = 'easy' | 'hard';
 
 /** Running per-country record, persisted by the client (localStorage) across sessions —
  * everything in this file only ever reads/writes this shape, never the storage mechanism

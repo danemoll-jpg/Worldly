@@ -4,7 +4,7 @@
 // Doubles as the local cache/fallback once cross-device sync is on (see network/sync.ts) —
 // synced state is mirrored here too, so a reload shows something instantly instead of a blank
 // screen while the live Firestore subscription catches up.
-import { QuizCategory, QuizMode, StatsMap } from '@worldly/engine';
+import { MultipleChoiceDifficulty, QuizCategory, QuizMode, StatsMap } from '@worldly/engine';
 
 const STATS_KEY = 'worldlyStats';
 const HISTORY_KEY = 'worldlySessionHistory';
@@ -39,6 +39,12 @@ export interface SessionRecord {
    * the grouping key everywhere history gets grouped by config, so a flags run and a plain
    * country-name run over the same region never collapse into one record. */
   category: QuizCategory;
+  /** Always recorded, but only meaningful when `mode` is 'multipleChoice' (every other mode
+   * just gets 'easy' here as a harmless default — see QuizConfig.multipleChoiceDifficulty).
+   * Also part of the grouping key: an easy-mode run and a hard-mode run are genuinely different
+   * challenges (hard's distractors are deliberately confusable), so they never collapse into
+   * one record either. */
+  multipleChoiceDifficulty: MultipleChoiceDifficulty;
   scope: 'all' | 'weakSpots';
   /** 'all' or a comma-joined, sorted list of continents — just a stable key for grouping
    * "personal best" comparisons by config, not shown verbatim anywhere. */
@@ -119,12 +125,18 @@ export function personalBestFor(
   history: SessionRecord[],
   mode: string,
   category: string,
+  multipleChoiceDifficulty: string,
   scope: string,
   continentsKey: string,
 ): PersonalBest | null {
   const matches = history.filter(
     (h) =>
-      h.mode === mode && h.category === category && h.scope === scope && h.continentsKey === continentsKey && h.totalQuestions > 0,
+      h.mode === mode &&
+      h.category === category &&
+      h.multipleChoiceDifficulty === multipleChoiceDifficulty &&
+      h.scope === scope &&
+      h.continentsKey === continentsKey &&
+      h.totalQuestions > 0,
   );
   if (matches.length === 0) return null;
   const best = matches.reduce((a, b) => (isBetterSession(b, a) ? b : a));
@@ -139,6 +151,7 @@ export function personalBestFor(
 export interface ConfigRecord {
   mode: SessionRecord['mode'];
   category: SessionRecord['category'];
+  multipleChoiceDifficulty: SessionRecord['multipleChoiceDifficulty'];
   scope: Exclude<SessionRecord['scope'], 'weakSpots'>;
   continentsKey: string;
   timesPlayed: number;
@@ -161,7 +174,7 @@ export function groupHistoryByConfig(history: SessionRecord[]): ConfigRecord[] {
   for (const record of history) {
     if (record.totalQuestions === 0) continue; // same guard personalBestFor uses
     if (record.scope === 'weakSpots') continue;
-    const key = `${record.mode}|${record.category}|${record.scope}|${record.continentsKey}`;
+    const key = `${record.mode}|${record.category}|${record.multipleChoiceDifficulty}|${record.scope}|${record.continentsKey}`;
     const existing = groups.get(key);
     if (existing) existing.push(record);
     else groups.set(key, [record]);
@@ -172,6 +185,7 @@ export function groupHistoryByConfig(history: SessionRecord[]): ConfigRecord[] {
       return {
         mode: records[0].mode,
         category: records[0].category,
+        multipleChoiceDifficulty: records[0].multipleChoiceDifficulty,
         scope: records[0].scope as 'all', // never 'weakSpots' — filtered out above
         continentsKey: records[0].continentsKey,
         timesPlayed: records.length,

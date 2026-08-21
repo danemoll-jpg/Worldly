@@ -1,5 +1,16 @@
 import { useMemo, useState } from 'react';
-import { CONTINENTS, Continent, COUNTRIES, masteryLevel, QuizCategory, QuizConfig, QuizMode, QuizScope, StatsMap } from '@worldly/engine';
+import {
+  CONTINENTS,
+  Continent,
+  COUNTRIES,
+  masteryLevel,
+  MultipleChoiceDifficulty,
+  QuizCategory,
+  QuizConfig,
+  QuizMode,
+  QuizScope,
+  StatsMap,
+} from '@worldly/engine';
 
 interface SetupScreenProps {
   stats: StatsMap;
@@ -26,6 +37,7 @@ function poolSize(continents: Continent[] | 'all', scope: QuizScope, stats: Stat
 export function SetupScreen({ stats, onBack, onStart }: SetupScreenProps) {
   const [mode, setMode] = useState<QuizMode>('findIt');
   const [category, setCategory] = useState<QuizCategory>('country');
+  const [multipleChoiceDifficulty, setMultipleChoiceDifficulty] = useState<MultipleChoiceDifficulty>('easy');
   const [continents, setContinents] = useState<Continent[] | 'all'>('all');
   const [scope, setScope] = useState<QuizScope>('all');
 
@@ -78,6 +90,33 @@ export function SetupScreen({ stats, onBack, onStart }: SetupScreenProps) {
                   : "You'll see a country's name and pick which of the 6 continents it's in — the gentlest mode, good for a quick warm-up."}
           </span>
         </label>
+
+        {mode === 'multipleChoice' && (
+          <label className="start-screen__label">
+            Challenge level
+            <div className="start-screen__options">
+              <button
+                type="button"
+                className={multipleChoiceDifficulty === 'easy' ? 'active' : ''}
+                onClick={() => setMultipleChoiceDifficulty('easy')}
+              >
+                Easy
+              </button>
+              <button
+                type="button"
+                className={multipleChoiceDifficulty === 'hard' ? 'active' : ''}
+                onClick={() => setMultipleChoiceDifficulty('hard')}
+              >
+                Hard
+              </button>
+            </div>
+            <span className="start-screen__hint">
+              {multipleChoiceDifficulty === 'easy'
+                ? 'The 3 wrong options are random countries — usually easy to rule out at a glance.'
+                : "The 3 wrong options are deliberately confusable — same continent and/or similar-sounding names (Niger/Nigeria, Austria/Australia, that kind of thing)."}
+            </span>
+          </label>
+        )}
 
         {mode !== 'continent' && (
           <label className="start-screen__label">
@@ -152,7 +191,7 @@ export function SetupScreen({ stats, onBack, onStart }: SetupScreenProps) {
           type="button"
           className="start-screen__submit"
           disabled={count === 0}
-          onClick={() => onStart({ mode, category, continents, scope })}
+          onClick={() => onStart({ mode, category, multipleChoiceDifficulty, continents, scope })}
         >
           Start quiz
         </button>

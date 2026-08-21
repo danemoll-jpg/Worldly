@@ -142,6 +142,9 @@ export function useQuiz() {
           // Continent mode doesn't have a category (see QuizConfig.category) — 'country' here
           // is just a harmless, consistent default, never shown or compared against anything.
           category: next.config.mode === 'continent' ? 'country' : next.config.category,
+          // Same idea: difficulty only means anything for multipleChoice (see
+          // QuizConfig.multipleChoiceDifficulty) — 'easy' elsewhere is just a consistent default.
+          multipleChoiceDifficulty: next.config.mode === 'multipleChoice' ? next.config.multipleChoiceDifficulty : 'easy',
           scope: next.config.scope,
           continentsKey: continentsKey(next.config.continents),
           totalQuestions: finalSummary.totalQuestions,
@@ -151,7 +154,16 @@ export function useQuiz() {
         };
         // Compare against history BEFORE this session's own record joins it, so "new best"
         // means beating a previous run, not tying yourself.
-        setPersonalBest(personalBestFor(currentHistory, record.mode, record.category, record.scope, record.continentsKey));
+        setPersonalBest(
+          personalBestFor(
+            currentHistory,
+            record.mode,
+            record.category,
+            record.multipleChoiceDifficulty,
+            record.scope,
+            record.continentsKey,
+          ),
+        );
         setSummary(finalSummary);
 
         if (currentSyncCode) {

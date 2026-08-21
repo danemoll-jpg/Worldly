@@ -39,9 +39,11 @@ export function RecordsScreen({ history, onBack }: RecordsScreenProps) {
         ) : (
           <ul className="records-list">
             {records.map((r) => (
-              <li key={`${r.mode}|${r.category}|${r.scope}|${r.continentsKey}`}>
+              <li key={`${r.mode}|${r.category}|${r.multipleChoiceDifficulty}|${r.scope}|${r.continentsKey}`}>
                 <div className="records-list__config">
-                  <span className="records-list__label">{describeConfig(r.mode, r.category, r.scope, r.continentsKey)}</span>
+                  <span className="records-list__label">
+                    {describeConfig(r.mode, r.category, r.multipleChoiceDifficulty, r.scope, r.continentsKey)}
+                  </span>
                   <span className="records-list__meta">
                     {r.timesPlayed} {r.timesPlayed === 1 ? 'time' : 'times'} · last {new Date(r.lastPlayedAt).toLocaleDateString()}
                   </span>

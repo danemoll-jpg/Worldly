@@ -1,4 +1,4 @@
-import { CountryDef, QuizCategory, QuizMode } from '@worldly/engine';
+import { CountryDef, MultipleChoiceDifficulty, QuizCategory, QuizMode } from '@worldly/engine';
 
 export function formatDuration(ms: number): string {
   const totalSeconds = Math.round(ms / 1000);
@@ -8,17 +8,25 @@ export function formatDuration(ms: number): string {
   return `${minutes}m ${seconds}s`;
 }
 
-/** Turns a session's (mode, category, scope, continentsKey) into the same plain-English
- * description a player would recognize from the setup screen — used on the records screen,
- * where every row IS a distinct config, so this is the only thing telling two rows apart.
- * `category` is ignored for 'continent' mode (it doesn't apply there — see QuizConfig). */
-export function describeConfig(mode: QuizMode, category: QuizCategory, scope: 'all' | 'weakSpots', continentsKey: string): string {
+/** Turns a session's (mode, category, difficulty, scope, continentsKey) into the same
+ * plain-English description a player would recognize from the setup screen — used on the
+ * records screen, where every row IS a distinct config, so this is the only thing telling two
+ * rows apart. `category` is ignored for 'continent' mode and `multipleChoiceDifficulty` is
+ * ignored for every mode except 'multipleChoice' (neither applies otherwise — see QuizConfig). */
+export function describeConfig(
+  mode: QuizMode,
+  category: QuizCategory,
+  multipleChoiceDifficulty: MultipleChoiceDifficulty,
+  scope: 'all' | 'weakSpots',
+  continentsKey: string,
+): string {
   const modeLabel =
     mode === 'findIt' ? 'Find it' : mode === 'typeIt' ? 'Type it' : mode === 'multipleChoice' ? 'Multiple choice' : 'Continents';
   const categoryLabel = mode === 'continent' || category === 'country' ? '' : ` (${category === 'flag' ? 'flags' : 'capitals'})`;
+  const difficultyLabel = mode === 'multipleChoice' && multipleChoiceDifficulty === 'hard' ? ' [hard]' : '';
   const scopeLabel = scope === 'weakSpots' ? 'weak spots only' : 'everything';
   const regionLabel = continentsKey === 'all' ? 'all regions' : continentsKey.split(',').join(', ');
-  return `${modeLabel}${categoryLabel} · ${scopeLabel} · ${regionLabel}`;
+  return `${modeLabel}${categoryLabel}${difficultyLabel} · ${scopeLabel} · ${regionLabel}`;
 }
 
 /** What to show as the quiz prompt for a given (category, country) pair — the answer is always

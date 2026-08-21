@@ -3,6 +3,7 @@ import { Answer, Continent, CONTINENTS, CountryDef, COUNTRY_BY_ID, QuizAnswerRes
 import { ConfirmDialog } from './ConfirmDialog';
 import { promptFor } from '../lib/format';
 import { MapFeature } from '../lib/geo';
+import { pickChoices } from '../lib/multipleChoice';
 import { WorldMap } from './WorldMap';
 
 interface QuizScreenProps {
@@ -21,19 +22,6 @@ interface Feedback {
 }
 
 const FEEDBACK_DISPLAY_MS = 1200;
-const MULTIPLE_CHOICE_OPTION_COUNT = 4;
-
-/** Picks the target plus up to 3 random distractors from the rest of the session's own pool
- * (so distractors are always relevant to whatever region/scope was chosen), shuffled together.
- * Falls back to fewer than 4 options gracefully — a heavily filtered quiz (one continent) can
- * legitimately have fewer than 4 countries in it at all. */
-function pickChoices(target: CountryDef, pool: CountryDef[]): CountryDef[] {
-  const others = pool.filter((c) => c.id !== target.id);
-  const distractorCount = Math.min(MULTIPLE_CHOICE_OPTION_COUNT - 1, others.length);
-  const shuffled = [...others].sort(() => Math.random() - 0.5);
-  const options = [target, ...shuffled.slice(0, distractorCount)];
-  return options.sort(() => Math.random() - 0.5);
-}
 
 export function QuizScreen({ session, onAnswer, onSkip, onQuit, onRestart }: QuizScreenProps) {
   const [feedback, setFeedback] = useState<Feedback | null>(null);
@@ -83,14 +71,14 @@ export function QuizScreen({ session, onAnswer, onSkip, onQuit, onRestart }: Qui
   const current = session.current;
   const totalInSession = session.pool.length;
   const questionNumber = session.askedIds.length + (current ? 1 : 0);
-  const { mode, category } = session.config;
+  const { mode, category, multipleChoiceDifficulty } = session.config;
   const prompt = current ? promptFor(category, current.country) : null;
   // Recomputed only when the question actually changes, not on every render (e.g. the feedback
   // flash) — otherwise the 4 buttons would visibly reshuffle themselves right after answering.
   const choices = useMemo(
-    () => (current && mode === 'multipleChoice' ? pickChoices(current.country, session.pool) : []),
+    () => (current && mode === 'multipleChoice' ? pickChoices(current.country, session.pool, multipleChoiceDifficulty) : []),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [current?.country.id, mode],
+    [current?.country.id, mode, multipleChoiceDifficulty],
   );
   // Safe to show WHERE the target is exactly when its identity isn't the thing being guessed:
   // findIt's whole mechanic IS finding it on the map, so that stays hidden regardless of
