@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { CONTINENTS, Continent, COUNTRIES, masteryLevel, QuizConfig, QuizMode, QuizScope, StatsMap } from '@worldly/engine';
+import { CONTINENTS, Continent, COUNTRIES, masteryLevel, QuizCategory, QuizConfig, QuizMode, QuizScope, StatsMap } from '@worldly/engine';
 
 interface SetupScreenProps {
   stats: StatsMap;
@@ -25,6 +25,7 @@ function poolSize(continents: Continent[] | 'all', scope: QuizScope, stats: Stat
 
 export function SetupScreen({ stats, onBack, onStart }: SetupScreenProps) {
   const [mode, setMode] = useState<QuizMode>('findIt');
+  const [category, setCategory] = useState<QuizCategory>('country');
   const [continents, setContinents] = useState<Continent[] | 'all'>('all');
   const [scope, setScope] = useState<QuizScope>('all');
 
@@ -56,13 +57,42 @@ export function SetupScreen({ stats, onBack, onStart }: SetupScreenProps) {
             <button type="button" className={mode === 'typeIt' ? 'active' : ''} onClick={() => setMode('typeIt')}>
               Type its name
             </button>
+            <button type="button" className={mode === 'continent' ? 'active' : ''} onClick={() => setMode('continent')}>
+              Guess the continent
+            </button>
           </div>
           <span className="start-screen__hint">
             {mode === 'findIt'
-              ? "You'll be told a country's name and tap it on the map."
-              : "A country will be highlighted on the map and you'll type its name — untimed, and typos are forgiven."}
+              ? "You'll be told a country and tap it on the map."
+              : mode === 'typeIt'
+                ? "A country will be highlighted on the map and you'll type its name — untimed, and typos are forgiven."
+                : "You'll see a country's name and pick which of the 6 continents it's in — the gentlest mode, good for a quick warm-up."}
           </span>
         </label>
+
+        {mode !== 'continent' && (
+          <label className="start-screen__label">
+            Quiz me on…
+            <div className="start-screen__options">
+              <button type="button" className={category === 'country' ? 'active' : ''} onClick={() => setCategory('country')}>
+                Country names
+              </button>
+              <button type="button" className={category === 'flag' ? 'active' : ''} onClick={() => setCategory('flag')}>
+                🇺🇳 Flags
+              </button>
+              <button type="button" className={category === 'capital' ? 'active' : ''} onClick={() => setCategory('capital')}>
+                Capitals
+              </button>
+            </div>
+            <span className="start-screen__hint">
+              {category === 'country'
+                ? "The classic version — the country's own name is the prompt."
+                : category === 'flag'
+                  ? "You'll be shown a flag instead of a name — still guessing the same country either way."
+                  : "You'll be shown a capital city instead of a name — still guessing the country it belongs to."}
+            </span>
+          </label>
+        )}
 
         <label className="start-screen__label">
           Which regions?
@@ -109,7 +139,12 @@ export function SetupScreen({ stats, onBack, onStart }: SetupScreenProps) {
           This quiz will cover <strong>{count}</strong> {count === 1 ? 'country' : 'countries'}.
         </p>
 
-        <button type="button" className="start-screen__submit" disabled={count === 0} onClick={() => onStart({ mode, continents, scope })}>
+        <button
+          type="button"
+          className="start-screen__submit"
+          disabled={count === 0}
+          onClick={() => onStart({ mode, category, continents, scope })}
+        >
           Start quiz
         </button>
       </div>

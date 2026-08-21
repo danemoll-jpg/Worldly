@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Answer, COUNTRY_BY_ID, QuizAnswerResult, QuizSessionState } from '@worldly/engine';
+import { Answer, Continent, CONTINENTS, COUNTRY_BY_ID, QuizAnswerResult, QuizSessionState } from '@worldly/engine';
 import { ConfirmDialog } from './ConfirmDialog';
+import { promptFor } from '../lib/format';
 import { MapFeature } from '../lib/geo';
 import { WorldMap } from './WorldMap';
 
@@ -25,6 +26,7 @@ export function QuizScreen({ session, onAnswer, onSkip, onQuit, onRestart }: Qui
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [typedAnswer, setTypedAnswer] = useState('');
   const [confirmingRestart, setConfirmingRestart] = useState(false);
+  const [hintRevealed, setHintRevealed] = useState(false);
   const seenResultCount = useRef(0);
   // Correctness per already-answered country this session — each country is asked at most
   // once, so this is a plain 1:1 map, not a running tally.
@@ -51,21 +53,28 @@ export function QuizScreen({ session, onAnswer, onSkip, onQuit, onRestart }: Qui
 
   // Skipping swaps `current` without adding a result (the effect above only fires on an
   // answer), so a typed-but-unsubmitted answer needs its own reset tied directly to which
-  // country is being asked about right now.
+  // country is being asked about right now. Same reason the hint has to reset here too —
+  // otherwise a hint revealed for one country would still be showing for the next.
   useEffect(() => {
     setTypedAnswer('');
+    setHintRevealed(false);
   }, [session.current?.country.id]);
 
   const current = session.current;
   const totalInSession = session.pool.length;
   const questionNumber = session.askedIds.length + (current ? 1 : 0);
+  const { mode, category } = session.config;
+  const prompt = current ? promptFor(category, current.country) : null;
 
   function fillFor(feature: MapFeature): string {
     if (!feature.quizzable) return 'var(--map-bg)';
     if (feedback && feature.id === feedback.result.countryId) {
       return feedback.result.correct ? 'var(--map-correct)' : 'var(--map-wrong)';
     }
-    if (session.config.mode === 'typeIt' && current && feature.id === current.country.id) {
+    // Highlighting the target country on the map is only safe when the prompt is the country's
+    // own name — for a flag/capital prompt (or continent mode, which always uses this same
+    // fillFor) that highlight would just hand over the answer for free.
+    if (mode === 'typeIt' && category === 'country' && current && feature.id === current.country.id) {
       return 'var(--map-target)';
     }
     const priorResult = resultByCountry.get(feature.id);
@@ -75,7 +84,7 @@ export function QuizScreen({ session, onAnswer, onSkip, onQuit, onRestart }: Qui
   }
 
   function handleMapTap(feature: MapFeature) {
-    if (!current || session.config.mode !== 'findIt' || !feature.quizzable || feedback) return;
+    if (!current || mode !== 'findIt' || !feature.quizzable || feedback) return;
     onAnswer({ type: 'findIt', clickedCountryId: feature.id });
   }
 
@@ -85,7 +94,55 @@ export function QuizScreen({ session, onAnswer, onSkip, onQuit, onRestart }: Qui
     onAnswer({ type: 'typeIt', submittedAnswer: typedAnswer });
   }
 
+  function handleContinentPick(continent: Continent) {
+    if (!current || feedback) return;
+    onAnswer({ type: 'continent', selectedContinent: continent });
+  }
+
   const canSkip = !!current && !feedback && session.remaining.length > 1;
+  // Continent mode is already a 6-way multiple choice — a hint would barely make it easier, so
+  // it's only offered for findIt/typeIt, where a "just guessing" moment is a real possibility.
+  const canHint = mode !== 'continent' && !!current && !feedback;
+
+  function promptLead(): React.ReactNode {
+    if (mode === 'continent') {
+      return (
+        <span>
+          Which continent is <strong>{current!.country.name}</strong> in?
+        </span>
+      );
+    }
+    if (!prompt) return null;
+
+    // findIt: always "find the country [that has/matching] X on the map". typeIt: always
+    // "what country [has/matches] X" — 'country' category keeps its original, simpler v1
+    // phrasing (no "matching" framing needed when the prompt already IS the country's name).
+    if (mode === 'findIt') {
+      if (category === 'country') {
+        return (
+          <span>
+            Find: <strong>{prompt.content}</strong>
+          </span>
+        );
+      }
+      const label = category === 'flag' ? 'this flag' : 'the capital';
+      return (
+        <span>
+          Find the country with {label}:{' '}
+          {prompt.kind === 'flag' ? <span className="quiz-prompt__flag">{prompt.content}</span> : <strong>{prompt.content}</strong>}
+        </span>
+      );
+    }
+
+    // typeIt
+    if (category === 'country') return <span>What country is highlighted?</span>;
+    const question = category === 'flag' ? 'Whose flag is this?' : 'Which country has this capital?';
+    return (
+      <span>
+        {question} {prompt.kind === 'flag' ? <span className="quiz-prompt__flag">{prompt.content}</span> : <strong>{prompt.content}</strong>}
+      </span>
+    );
+  }
 
   return (
     <div className="app">
@@ -110,13 +167,17 @@ export function QuizScreen({ session, onAnswer, onSkip, onQuit, onRestart }: Qui
           </span>
         ) : current ? (
           <>
-            {session.config.mode === 'findIt' ? (
-              <span>
-                Find: <strong>{current.country.name}</strong>
-              </span>
-            ) : (
-              <span>What country is highlighted?</span>
-            )}
+            {promptLead()}
+            {canHint &&
+              (hintRevealed ? (
+                <span className="quiz-hint quiz-hint--revealed">
+                  🤔 {current.country.continent} · starts with "{current.country.name[0]}"
+                </span>
+              ) : (
+                <button type="button" className="quiz-hint" onClick={() => setHintRevealed(true)}>
+                  🤔 Hint
+                </button>
+              ))}
             <button type="button" className="quiz-skip" onClick={onSkip} disabled={!canSkip} title="Come back to this one later in the session">
               Skip for now ⤼
             </button>
@@ -126,7 +187,7 @@ export function QuizScreen({ session, onAnswer, onSkip, onQuit, onRestart }: Qui
 
       <WorldMap fillFor={fillFor} onCountryTap={handleMapTap} />
 
-      {session.config.mode === 'typeIt' && current && (
+      {mode === 'typeIt' && current && (
         <form className="quiz-answer-form" onSubmit={handleTypeSubmit}>
           <input
             type="text"
@@ -143,6 +204,16 @@ export function QuizScreen({ session, onAnswer, onSkip, onQuit, onRestart }: Qui
             Submit
           </button>
         </form>
+      )}
+
+      {mode === 'continent' && current && (
+        <div className="quiz-continent-choices">
+          {CONTINENTS.map((c) => (
+            <button key={c} type="button" disabled={!!feedback} onClick={() => handleContinentPick(c)}>
+              {c}
+            </button>
+          ))}
+        </div>
       )}
 
       {confirmingRestart && (

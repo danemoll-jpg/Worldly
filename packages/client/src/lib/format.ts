@@ -1,3 +1,5 @@
+import { CountryDef, QuizCategory, QuizMode } from '@worldly/engine';
+
 export function formatDuration(ms: number): string {
   const totalSeconds = Math.round(ms / 1000);
   const minutes = Math.floor(totalSeconds / 60);
@@ -6,12 +8,25 @@ export function formatDuration(ms: number): string {
   return `${minutes}m ${seconds}s`;
 }
 
-/** Turns a session's (mode, scope, continentsKey) into the same plain-English description a
- * player would recognize from the setup screen — used on the records screen, where every row
- * IS a distinct config, so this is the only thing telling two rows apart. */
-export function describeConfig(mode: 'findIt' | 'typeIt', scope: 'all' | 'weakSpots', continentsKey: string): string {
-  const modeLabel = mode === 'findIt' ? 'Find it' : 'Type it';
+/** Turns a session's (mode, category, scope, continentsKey) into the same plain-English
+ * description a player would recognize from the setup screen — used on the records screen,
+ * where every row IS a distinct config, so this is the only thing telling two rows apart.
+ * `category` is ignored for 'continent' mode (it doesn't apply there — see QuizConfig). */
+export function describeConfig(mode: QuizMode, category: QuizCategory, scope: 'all' | 'weakSpots', continentsKey: string): string {
+  const modeLabel = mode === 'findIt' ? 'Find it' : mode === 'typeIt' ? 'Type it' : 'Continents';
+  const categoryLabel = mode === 'continent' || category === 'country' ? '' : ` (${category === 'flag' ? 'flags' : 'capitals'})`;
   const scopeLabel = scope === 'weakSpots' ? 'weak spots only' : 'everything';
   const regionLabel = continentsKey === 'all' ? 'all regions' : continentsKey.split(',').join(', ');
-  return `${modeLabel} · ${scopeLabel} · ${regionLabel}`;
+  return `${modeLabel}${categoryLabel} · ${scopeLabel} · ${regionLabel}`;
+}
+
+/** What to show as the quiz prompt for a given (category, country) pair — the answer is always
+ * "identify the country" (see QuizCategory's doc comment); this just decides what's put in
+ * front of the player to identify it FROM. 'flag' is deliberately its own `kind` rather than
+ * lumped in with 'text' — callers render it at a much larger size, since a tiny flag emoji is
+ * hard to make out. */
+export function promptFor(category: QuizCategory, country: CountryDef): { kind: 'text' | 'flag'; content: string } {
+  if (category === 'flag') return { kind: 'flag', content: country.flagEmoji };
+  if (category === 'capital') return { kind: 'text', content: country.capitals[0] };
+  return { kind: 'text', content: country.name };
 }

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { DailyChallengeScreen } from './components/DailyChallengeScreen';
 import { HomeScreen } from './components/HomeScreen';
 import { LookupScreen } from './components/LookupScreen';
 import { MasteryScreen } from './components/MasteryScreen';
@@ -9,7 +10,7 @@ import { SummaryScreen } from './components/SummaryScreen';
 import { SyncScreen } from './components/SyncScreen';
 import { useQuiz } from './hooks/useQuiz';
 
-type Screen = 'home' | 'setup' | 'lookup' | 'mastery' | 'sync' | 'records';
+type Screen = 'home' | 'setup' | 'lookup' | 'mastery' | 'sync' | 'records' | 'daily';
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('home');
@@ -65,6 +66,10 @@ export default function App() {
     return <RecordsScreen history={quiz.history} onBack={() => setScreen('home')} />;
   }
 
+  if (screen === 'daily') {
+    return <DailyChallengeScreen onBack={() => setScreen('home')} />;
+  }
+
   if (screen === 'sync') {
     return (
       <SyncScreen
@@ -85,6 +90,7 @@ export default function App() {
       onBrowse={() => setScreen('lookup')}
       onMasteryMap={() => setScreen('mastery')}
       onRecords={() => setScreen('records')}
+      onDaily={() => setScreen('daily')}
       onSync={() => setScreen('sync')}
       syncStatus={quiz.syncStatus}
       syncCode={quiz.syncCode}

@@ -4,7 +4,7 @@
 // Doubles as the local cache/fallback once cross-device sync is on (see network/sync.ts) —
 // synced state is mirrored here too, so a reload shows something instantly instead of a blank
 // screen while the live Firestore subscription catches up.
-import { StatsMap } from '@worldly/engine';
+import { QuizCategory, QuizMode, StatsMap } from '@worldly/engine';
 
 const STATS_KEY = 'worldlyStats';
 const HISTORY_KEY = 'worldlySessionHistory';
@@ -33,7 +33,12 @@ export interface SessionRecord {
    * reliably instead of guessing from completedAt alone. */
   id: string;
   completedAt: number;
-  mode: 'findIt' | 'typeIt';
+  mode: QuizMode;
+  /** Always recorded, but only meaningful when `mode` is 'findIt' or 'typeIt' (continent-mode
+   * sessions just get 'country' here as a harmless default — see QuizConfig.category). Part of
+   * the grouping key everywhere history gets grouped by config, so a flags run and a plain
+   * country-name run over the same region never collapse into one record. */
+  category: QuizCategory;
   scope: 'all' | 'weakSpots';
   /** 'all' or a comma-joined, sorted list of continents — just a stable key for grouping
    * "personal best" comparisons by config, not shown verbatim anywhere. */
@@ -110,9 +115,16 @@ export interface PersonalBest {
  * ONE record, not independent best-time/best-accuracy numbers, so "your record" always names an
  * actual run that happened rather than a Frankenstein of your fastest run's time and your
  * best-ever run's accuracy mashed together. */
-export function personalBestFor(history: SessionRecord[], mode: string, scope: string, continentsKey: string): PersonalBest | null {
+export function personalBestFor(
+  history: SessionRecord[],
+  mode: string,
+  category: string,
+  scope: string,
+  continentsKey: string,
+): PersonalBest | null {
   const matches = history.filter(
-    (h) => h.mode === mode && h.scope === scope && h.continentsKey === continentsKey && h.totalQuestions > 0,
+    (h) =>
+      h.mode === mode && h.category === category && h.scope === scope && h.continentsKey === continentsKey && h.totalQuestions > 0,
   );
   if (matches.length === 0) return null;
   const best = matches.reduce((a, b) => (isBetterSession(b, a) ? b : a));
@@ -126,6 +138,7 @@ export function personalBestFor(history: SessionRecord[], mode: string, scope: s
  * Never a 'weakSpots' scope — see groupHistoryByConfig. */
 export interface ConfigRecord {
   mode: SessionRecord['mode'];
+  category: SessionRecord['category'];
   scope: Exclude<SessionRecord['scope'], 'weakSpots'>;
   continentsKey: string;
   timesPlayed: number;
@@ -148,7 +161,7 @@ export function groupHistoryByConfig(history: SessionRecord[]): ConfigRecord[] {
   for (const record of history) {
     if (record.totalQuestions === 0) continue; // same guard personalBestFor uses
     if (record.scope === 'weakSpots') continue;
-    const key = `${record.mode}|${record.scope}|${record.continentsKey}`;
+    const key = `${record.mode}|${record.category}|${record.scope}|${record.continentsKey}`;
     const existing = groups.get(key);
     if (existing) existing.push(record);
     else groups.set(key, [record]);
@@ -158,6 +171,7 @@ export function groupHistoryByConfig(history: SessionRecord[]): ConfigRecord[] {
       const best = records.reduce((a, b) => (isBetterSession(b, a) ? b : a));
       return {
         mode: records[0].mode,
+        category: records[0].category,
         scope: records[0].scope as 'all', // never 'weakSpots' — filtered out above
         continentsKey: records[0].continentsKey,
         timesPlayed: records.length,

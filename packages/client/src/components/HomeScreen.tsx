@@ -1,4 +1,6 @@
+import { COUNTRIES } from '@worldly/engine';
 import { GAME_HUB_URL } from '../lib/hub';
+import { useDailyChallenge } from '../hooks/useDailyChallenge';
 import { SyncStatus } from '../hooks/useQuiz';
 
 interface HomeScreenProps {
@@ -6,13 +8,15 @@ interface HomeScreenProps {
   onBrowse: () => void;
   onMasteryMap: () => void;
   onRecords: () => void;
+  onDaily: () => void;
   onSync: () => void;
   syncStatus: SyncStatus;
   syncCode: string | null;
 }
 
-export function HomeScreen({ onStartQuiz, onBrowse, onMasteryMap, onRecords, onSync, syncStatus, syncCode }: HomeScreenProps) {
+export function HomeScreen({ onStartQuiz, onBrowse, onMasteryMap, onRecords, onDaily, onSync, syncStatus, syncCode }: HomeScreenProps) {
   const synced = syncStatus === 'synced' && !!syncCode;
+  const daily = useDailyChallenge(COUNTRIES);
 
   return (
     <div className="start-screen">
@@ -27,6 +31,15 @@ export function HomeScreen({ onStartQuiz, onBrowse, onMasteryMap, onRecords, onS
         </p>
 
         <div className="home-screen__choices">
+          <button type="button" className="home-screen__choice" onClick={onDaily}>
+            <span className="home-screen__choice-emoji">🔥</span>
+            <span className="home-screen__choice-title">Daily challenge</span>
+            <span className="home-screen__choice-sub">
+              {daily.hasPlayedToday
+                ? `Done for today — ${daily.streak > 0 ? `${daily.streak}-day streak` : 'come back tomorrow'}.`
+                : 'One shared flag a day — everyone gets the same one.'}
+            </span>
+          </button>
           <button type="button" className="home-screen__choice" onClick={onStartQuiz}>
             <span className="home-screen__choice-emoji">📝</span>
             <span className="home-screen__choice-title">Start a quiz</span>

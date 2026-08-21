@@ -592,6 +592,64 @@ button {
   cursor: not-allowed;
 }
 
+/* ---------- Hint button ---------- */
+
+.quiz-hint {
+  /* Same pill treatment as .quiz-skip, sitting right alongside it — a secondary action next to
+     the question, not a full-weight button. */
+  padding: 0.35rem 0.85rem;
+  border-radius: 999px;
+  border: 2px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 0.8rem;
+}
+
+.quiz-hint--revealed {
+  /* Once revealed it's just informational text, not a button anymore — no border/background to
+     imply anything is still clickable here. */
+  border: none;
+  padding: 0.2rem 0;
+  opacity: 0.85;
+  font-style: italic;
+}
+
+/* ---------- Flag prompt ---------- */
+
+.quiz-prompt__flag {
+  /* A flag emoji at normal text size is hard to make out — this is the whole prompt for the
+     flags category, so it earns real size. */
+  font-size: 2.4rem;
+  line-height: 1;
+  vertical-align: middle;
+}
+
+/* ---------- Continent mode ---------- */
+
+.quiz-continent-choices {
+  width: 100%;
+  max-width: 30rem;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.6rem;
+}
+
+.quiz-continent-choices button {
+  padding: 0.8rem;
+  border-radius: 0.6rem;
+  border: 2px solid var(--accent);
+  background: transparent;
+  color: var(--text-light);
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.quiz-continent-choices button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* ---------- Lookup screen ---------- */
 
 .lookup-search {
@@ -606,6 +664,33 @@ button {
 .lookup-detail {
   font-size: 1.05rem;
   text-align: center;
+  width: 100%;
+  max-width: 30rem;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(224, 164, 88, 0.3);
+  border-radius: 0.7rem;
+  padding: 0.7rem 1rem;
+}
+
+.lookup-detail__headline {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+}
+
+.lookup-detail__flag {
+  font-size: 1.8rem;
+  line-height: 1;
+}
+
+.lookup-detail__facts {
+  margin-top: 0.4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  font-size: 0.85rem;
+  opacity: 0.85;
 }
 
 .lookup-list {
