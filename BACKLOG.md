@@ -34,14 +34,14 @@ _(nothing currently open — everything below is either shipped or deliberately 
   entirely unchanged — the prompt just shows a flag or a capital instead of the country name),
   plus a genuinely new `continent` QuizMode (6-button pick, since the answer there is a
   continent, not a country). Data (`capitals`/`languages`/`flagEmoji`) bulk-added to every
-  `CountryDef`. See PENDING_COMMIT.
+  `CountryDef`. Commits `bf45b38`, `437fe19`.
 - **A hint system** — a "🤔 Hint" button on findIt/typeIt questions reveals the country's
   continent and first letter on tap; not offered for continent mode (already easy multiple
-  choice). See PENDING_COMMIT.
+  choice). Commits `bf45b38`, `437fe19`.
 - **A daily-challenge mode** — `useDailyChallenge` + `DailyChallengeScreen`: one deterministic
   flag-guessing question a day (djb2 hash of the local date), a persistent local streak counter,
-  kept deliberately separate from the regular history/stats pipeline. See PENDING_COMMIT.
+  kept deliberately separate from the regular history/stats pipeline. Commits `bf45b38`, `437fe19`.
 - **Atlas/browse mode with real facts** — `LookupScreen`'s detail panel now shows flag,
   capital(s), and languages. Deliberately NOT population — see `countries.ts`'s header comment;
   the `world-countries` data source doesn't carry it, and hand-typing/guessing 197 numbers that
-  go stale immediately wasn't worth it for a quick reference. See PENDING_COMMIT.
+  go stale immediately wasn't worth it for a quick reference. Commits `bf45b38`, `437fe19`.
