@@ -122,10 +122,11 @@ export function personalBestFor(history: SessionRecord[], mode: string, scope: s
 /** One row of the records screen — every distinct (mode, scope, region) combination the player
  * has actually completed at least once, each with its own single best session. There's no one
  * "top score" for the app as a whole: a full-world find-it run and a weak-spots-only type-it
- * run aren't comparable, so this is deliberately a list of separate records, not one number. */
+ * run aren't comparable, so this is deliberately a list of separate records, not one number.
+ * Never a 'weakSpots' scope — see groupHistoryByConfig. */
 export interface ConfigRecord {
   mode: SessionRecord['mode'];
-  scope: SessionRecord['scope'];
+  scope: Exclude<SessionRecord['scope'], 'weakSpots'>;
   continentsKey: string;
   timesPlayed: number;
   bestPercentCorrect: number;
@@ -136,11 +137,17 @@ export interface ConfigRecord {
 
 /** Groups history into one ConfigRecord per distinct config actually played, newest-played
  * first — the natural order for "what have I been doing lately," and stable even as new
- * sessions keep getting prepended to `history`. */
+ * sessions keep getting prepended to `history`. Excludes 'weakSpots' sessions entirely: the
+ * pool of countries in a weak-spots quiz isn't fixed the way a region is — it shrinks as you
+ * improve and grows as you rack up new misses — so even showing time as a mere tiebreaker/
+ * context field next to the accuracy is misleading (a 3-country pool's time and a 20-country
+ * pool's time from a different week aren't the same measurement). Rather than caveat that on
+ * every weak-spots row, it's simplest and most honest to just not track a "record" for it. */
 export function groupHistoryByConfig(history: SessionRecord[]): ConfigRecord[] {
   const groups = new Map<string, SessionRecord[]>();
   for (const record of history) {
     if (record.totalQuestions === 0) continue; // same guard personalBestFor uses
+    if (record.scope === 'weakSpots') continue;
     const key = `${record.mode}|${record.scope}|${record.continentsKey}`;
     const existing = groups.get(key);
     if (existing) existing.push(record);
@@ -151,7 +158,7 @@ export function groupHistoryByConfig(history: SessionRecord[]): ConfigRecord[] {
       const best = records.reduce((a, b) => (isBetterSession(b, a) ? b : a));
       return {
         mode: records[0].mode,
-        scope: records[0].scope,
+        scope: records[0].scope as 'all', // never 'weakSpots' — filtered out above
         continentsKey: records[0].continentsKey,
         timesPlayed: records.length,
         bestPercentCorrect: best.percentCorrect,
