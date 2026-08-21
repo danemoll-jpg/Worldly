@@ -152,13 +152,14 @@ export function QuizScreen({ session, onAnswer, onSkip, onQuit, onRestart }: Qui
     }
     if (!prompt) return null;
 
-    // findIt and multipleChoice share the exact same prompt wording — "find" reads fine whether
-    // the answer comes from tapping the map or tapping a button, and keeping the copy identical
-    // means switching between them (in setup) never looks like a different question. typeIt
-    // below is worded as "what country [has/matches] X" — 'country' category keeps its
-    // original, simpler v1 phrasing (no "matching" framing needed when the prompt already IS
-    // the country's name).
-    if (mode === 'findIt' || mode === 'multipleChoice') {
+    // multipleChoice's 'country' category is a special case: the button options are already
+    // country NAMES, so a "Find: France" text prompt would just be handing the answer straight
+    // back — no different from labeling a multiple-choice question with its own correct answer.
+    // It has to use typeIt's approach instead (the map silently highlights the target, no name
+    // said out loud anywhere) for the buttons to mean anything. flag/capital categories don't
+    // have this problem — the prompt there is never the same representation as the options — so
+    // multipleChoice can share findIt's wording for those exactly as before.
+    if (mode === 'findIt' || (mode === 'multipleChoice' && category !== 'country')) {
       if (category === 'country') {
         return (
           <span>
@@ -175,7 +176,8 @@ export function QuizScreen({ session, onAnswer, onSkip, onQuit, onRestart }: Qui
       );
     }
 
-    // typeIt
+    // typeIt (any category) and multipleChoice + 'country' both rely on the map's own
+    // highlight to say which country is being asked about, never a text name.
     if (category === 'country') return <span>What country is highlighted?</span>;
     const question = category === 'flag' ? 'Whose flag is this?' : 'Which country has this capital?';
     return (
