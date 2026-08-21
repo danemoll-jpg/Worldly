@@ -5,6 +5,7 @@
 import { isAnswerCorrect } from './matching.js';
 import { masteryLevel } from './stats.js';
 import {
+  Continent,
   CountryDef,
   QuizAnswerResult,
   QuizConfig,
@@ -51,7 +52,10 @@ export function startSession(
   };
 }
 
-export type Answer = { type: 'findIt'; clickedCountryId: string } | { type: 'typeIt'; submittedAnswer: string };
+export type Answer =
+  | { type: 'findIt'; clickedCountryId: string }
+  | { type: 'typeIt'; submittedAnswer: string }
+  | { type: 'continent'; selectedContinent: Continent };
 
 /** Scores the current question and advances to the next one (or ends the session if that was
  * the last question). No-ops if the session's already complete. */
@@ -60,12 +64,17 @@ export function submitAnswer(state: QuizSessionState, answer: Answer, now: numbe
 
   const elapsedMs = state.questionStartedAt ? Math.max(0, now - state.questionStartedAt) : 0;
   const target = state.current.country;
-  const correct = answer.type === 'findIt' ? answer.clickedCountryId === target.id : isAnswerCorrect(answer.submittedAnswer, target);
+  const correct =
+    answer.type === 'findIt'
+      ? answer.clickedCountryId === target.id
+      : answer.type === 'continent'
+        ? answer.selectedContinent === target.continent
+        : isAnswerCorrect(answer.submittedAnswer, target);
 
   const result: QuizAnswerResult = {
     countryId: target.id,
     correct,
-    submittedAnswer: answer.type === 'typeIt' ? answer.submittedAnswer : undefined,
+    submittedAnswer: answer.type === 'typeIt' ? answer.submittedAnswer : answer.type === 'continent' ? answer.selectedContinent : undefined,
     elapsedMs,
   };
 

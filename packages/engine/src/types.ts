@@ -17,13 +17,35 @@ export interface CountryDef {
   name: string;
   continent: Continent;
   aliases?: string[];
+  /** Almost always one entry — a few countries (South Africa, Bolivia, ...) have more than one
+   * official capital, in which case this is every one of them, in the source data's own order.
+   * `capitals[0]` is what the capitals quiz category shows/asks about and what any UI that only
+   * has room for "the" capital uses; the atlas panel shows the full list. Never empty. */
+  capitals: string[];
+  /** Official/widely-spoken language names, unranked beyond the source data's own order — shown
+   * in the atlas panel. Not currently used for quizzing. Never empty. */
+  languages: string[];
+  /** A single Unicode flag emoji (a regional-indicator pair) — used as-is by the flags quiz
+   * category and the atlas panel, no image asset involved. */
+  flagEmoji: string;
 }
 
-/** 'findIt': the country's named, the player clicks/taps it on the map.
- * 'typeIt': the country's highlighted on the map, the player types its name — untimed,
- * leniently matched (see matching.ts). Deliberately just these two for v1; flags/capitals/etc.
- * are a different question shape that can slot in later without touching this type. */
-export type QuizMode = 'findIt' | 'typeIt';
+/** 'findIt': the country's named (or shown via `category` — see below), the player clicks/taps
+ * it on the map. 'typeIt': the country's highlighted on the map, the player types its name —
+ * untimed, leniently matched (see matching.ts). 'continent': the country's named, the player
+ * picks which of the 6 continents it's in from a short button list — genuinely different from
+ * the other two (the answer is a continent, not a country), so it doesn't cross with `category`
+ * the way findIt/typeIt do; a continent question always shows the plain country name. */
+export type QuizMode = 'findIt' | 'typeIt' | 'continent';
+
+/** What's shown as the prompt for findIt/typeIt — the thing being asked about is always still
+ * "which country is this", just presented a different way: 'country' (the name, the original
+ * v1 behavior), 'flag' (just the flag emoji — "whose flag is this?"), or 'capital' (just
+ * `capitals[0]` — "which country has this capital?"). Deliberately doesn't touch how the answer
+ * is given or checked at all (see submitAnswer) — a flag/capital question is answered exactly
+ * like a country-name one, just with a different prompt in front of it. Ignored when `mode` is
+ * 'continent' (see QuizMode). */
+export type QuizCategory = 'country' | 'flag' | 'capital';
 
 /** 'all': every quizzable country (in the selected continents) appears once per session — the
  * "get through everything" mode. 'weakSpots': only countries with at least one past miss are
@@ -34,6 +56,10 @@ export type QuizScope = 'all' | 'weakSpots';
 
 export interface QuizConfig {
   mode: QuizMode;
+  /** Always present, but only meaningful when `mode` is 'findIt' or 'typeIt' — ignored for
+   * 'continent'. Defaults to 'country' (the original v1 prompt) wherever a config is built
+   * without deliberately choosing something else. */
+  category: QuizCategory;
   continents: Continent[] | 'all';
   scope: QuizScope;
 }
@@ -58,8 +84,9 @@ export interface QuizQuestion {
 export interface QuizAnswerResult {
   countryId: string;
   correct: boolean;
-  /** Only present for 'typeIt' — what the player actually typed, kept for the session summary
-   * (e.g. showing "you typed X, it was Y" on a miss). */
+  /** Present for 'typeIt' (what was actually typed) and 'continent' (which continent was
+   * picked) — absent for 'findIt', which has nothing worth echoing back beyond right/wrong.
+   * Kept for the session summary (e.g. showing "you said X, it was Y" on a miss). */
   submittedAnswer?: string;
   elapsedMs: number;
 }

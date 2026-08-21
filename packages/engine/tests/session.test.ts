@@ -15,13 +15,13 @@ function rng() {
 
 describe('startSession', () => {
   it('filters to the requested continents', () => {
-    const config: QuizConfig = { mode: 'findIt', continents: ['Europe'], scope: 'all' };
+    const config: QuizConfig = { mode: 'findIt', category: 'country', continents: ['Europe'], scope: 'all' };
     const state = startSession(config, POOL, {}, rng);
     expect(state.pool.map((c) => c.id).sort()).toEqual(['de', 'fr']);
   });
 
   it('includes everything when continents is "all"', () => {
-    const config: QuizConfig = { mode: 'findIt', continents: 'all', scope: 'all' };
+    const config: QuizConfig = { mode: 'findIt', category: 'country', continents: 'all', scope: 'all' };
     const state = startSession(config, POOL, {}, rng);
     expect(state.pool).toHaveLength(4);
   });
@@ -31,7 +31,7 @@ describe('startSession', () => {
       fr: { countryId: 'fr', seen: 3, missed: 1, lastSeenAt: null }, // ratio 0.33 — shaky
       de: { countryId: 'de', seen: 3, missed: 0, lastSeenAt: null }, // ratio 0 — solid
     };
-    const config: QuizConfig = { mode: 'typeIt', continents: 'all', scope: 'weakSpots' };
+    const config: QuizConfig = { mode: 'typeIt', category: 'country', continents: 'all', scope: 'weakSpots' };
     const state = startSession(config, POOL, stats, rng);
     expect(state.pool.map((c) => c.id)).toEqual(['fr']);
   });
@@ -45,13 +45,13 @@ describe('startSession', () => {
     const stats: StatsMap = {
       fr: { countryId: 'fr', seen: 11, missed: 1, lastSeenAt: null },
     };
-    const config: QuizConfig = { mode: 'typeIt', continents: 'all', scope: 'weakSpots' };
+    const config: QuizConfig = { mode: 'typeIt', category: 'country', continents: 'all', scope: 'weakSpots' };
     const state = startSession(config, POOL, stats, rng);
     expect(state.pool).toHaveLength(0);
   });
 
   it('starts with a null current question when the pool is empty', () => {
-    const config: QuizConfig = { mode: 'findIt', continents: ['Oceania'], scope: 'all' };
+    const config: QuizConfig = { mode: 'findIt', category: 'country', continents: ['Oceania'], scope: 'all' };
     const state = startSession(config, POOL, {}, rng);
     expect(state.current).toBeNull();
     expect(isSessionComplete(state)).toBe(true);
@@ -60,7 +60,7 @@ describe('startSession', () => {
 
 describe('submitAnswer + full session flow', () => {
   it('advances through every question and completes', () => {
-    const config: QuizConfig = { mode: 'findIt', continents: 'all', scope: 'all' };
+    const config: QuizConfig = { mode: 'findIt', category: 'country', continents: 'all', scope: 'all' };
     let state = startSession(config, POOL, {}, rng, 1000);
     expect(isSessionComplete(state)).toBe(false);
 
@@ -78,7 +78,7 @@ describe('submitAnswer + full session flow', () => {
   });
 
   it('records a miss when the wrong country is clicked', () => {
-    const config: QuizConfig = { mode: 'findIt', continents: 'all', scope: 'all' };
+    const config: QuizConfig = { mode: 'findIt', category: 'country', continents: 'all', scope: 'all' };
     let state = startSession(config, POOL, {}, rng);
     const wrongId = POOL.find((c) => c.id !== state.current!.country.id)!.id;
     state = submitAnswer(state, { type: 'findIt', clickedCountryId: wrongId });
@@ -86,7 +86,7 @@ describe('submitAnswer + full session flow', () => {
   });
 
   it('scores typeIt answers via lenient matching', () => {
-    const config: QuizConfig = { mode: 'typeIt', continents: ['Europe'], scope: 'all' };
+    const config: QuizConfig = { mode: 'typeIt', category: 'country', continents: ['Europe'], scope: 'all' };
     let state = startSession(config, POOL, {}, rng);
     const target = state.current!.country; // France or Germany
     state = submitAnswer(state, { type: 'typeIt', submittedAnswer: target.name.toLowerCase() });
@@ -94,8 +94,21 @@ describe('submitAnswer + full session flow', () => {
     expect(state.results[0].submittedAnswer).toBe(target.name.toLowerCase());
   });
 
+  it("scores continent answers by comparing against the country's actual continent", () => {
+    const config: QuizConfig = { mode: 'continent', category: 'country', continents: ['Europe'], scope: 'all' };
+    const state = startSession(config, POOL, {}, rng);
+
+    const right = submitAnswer(state, { type: 'continent', selectedContinent: 'Europe' });
+    expect(right.results[0].correct).toBe(true);
+    expect(right.results[0].submittedAnswer).toBe('Europe');
+
+    const wrong = submitAnswer(state, { type: 'continent', selectedContinent: 'Asia' });
+    expect(wrong.results[0].correct).toBe(false);
+    expect(wrong.results[0].submittedAnswer).toBe('Asia');
+  });
+
   it('is a no-op once the session is already complete', () => {
-    const config: QuizConfig = { mode: 'findIt', continents: ['Oceania'], scope: 'all' };
+    const config: QuizConfig = { mode: 'findIt', category: 'country', continents: ['Oceania'], scope: 'all' };
     const state = startSession(config, POOL, {}, rng);
     const after = submitAnswer(state, { type: 'findIt', clickedCountryId: 'anything' });
     expect(after).toEqual(state);
@@ -104,7 +117,7 @@ describe('submitAnswer + full session flow', () => {
 
 describe('skipCurrent', () => {
   it('moves the current question to the back without touching askedIds/results', () => {
-    const config: QuizConfig = { mode: 'findIt', continents: 'all', scope: 'all' };
+    const config: QuizConfig = { mode: 'findIt', category: 'country', continents: 'all', scope: 'all' };
     let state = startSession(config, POOL, {}, rng);
     const firstId = state.current!.country.id;
 
@@ -119,7 +132,7 @@ describe('skipCurrent', () => {
   });
 
   it('the skipped country comes back around later in the same session', () => {
-    const config: QuizConfig = { mode: 'findIt', continents: 'all', scope: 'all' };
+    const config: QuizConfig = { mode: 'findIt', category: 'country', continents: 'all', scope: 'all' };
     let state = startSession(config, POOL, {}, rng);
     const skippedId = state.current!.country.id;
     state = skipCurrent(state);
@@ -137,7 +150,7 @@ describe('skipCurrent', () => {
   });
 
   it("doesn't total-question count or pool order — 'X of N' stays stable across skips", () => {
-    const config: QuizConfig = { mode: 'findIt', continents: 'all', scope: 'all' };
+    const config: QuizConfig = { mode: 'findIt', category: 'country', continents: 'all', scope: 'all' };
     let state = startSession(config, POOL, {}, rng);
     const poolOrder = state.pool.map((c) => c.id);
     state = skipCurrent(state);
@@ -146,7 +159,7 @@ describe('skipCurrent', () => {
   });
 
   it('is a no-op with one question left (guarantees the session can always terminate)', () => {
-    const config: QuizConfig = { mode: 'findIt', continents: 'all', scope: 'all' };
+    const config: QuizConfig = { mode: 'findIt', category: 'country', continents: 'all', scope: 'all' };
     let state = startSession(config, POOL, {}, rng);
     while (state.remaining.length > 1) {
       state = submitAnswer(state, { type: 'findIt', clickedCountryId: state.current!.country.id });
@@ -157,7 +170,7 @@ describe('skipCurrent', () => {
   });
 
   it('is a no-op once the session is already complete', () => {
-    const config: QuizConfig = { mode: 'findIt', continents: ['Oceania'], scope: 'all' };
+    const config: QuizConfig = { mode: 'findIt', category: 'country', continents: ['Oceania'], scope: 'all' };
     const state = startSession(config, POOL, {}, rng);
     expect(skipCurrent(state)).toEqual(state);
   });
@@ -165,7 +178,7 @@ describe('skipCurrent', () => {
 
 describe('summarizeSession', () => {
   it('computes percentCorrect and totals', () => {
-    const config: QuizConfig = { mode: 'findIt', continents: 'all', scope: 'all' };
+    const config: QuizConfig = { mode: 'findIt', category: 'country', continents: 'all', scope: 'all' };
     let state = startSession(config, POOL, {}, rng, 0);
     // 3 correct, 1 wrong
     for (const country of state.pool.slice(0, 3)) {

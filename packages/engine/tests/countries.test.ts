@@ -26,6 +26,15 @@ describe('COUNTRIES data integrity', () => {
     expect(Object.keys(COUNTRY_BY_ID)).toHaveLength(COUNTRIES.length);
   });
 
+  it('every entry has a capital, at least one language, and a flag emoji', () => {
+    for (const country of COUNTRIES) {
+      expect(country.capitals.length).toBeGreaterThan(0);
+      expect(country.capitals[0].trim().length).toBeGreaterThan(0);
+      expect(country.languages.length).toBeGreaterThan(0);
+      expect(country.flagEmoji.trim().length).toBeGreaterThan(0);
+    }
+  });
+
   it('includes some well-known and some genuinely obscure countries — completeness is the whole point', () => {
     const names = COUNTRIES.map((c) => c.name);
     expect(names).toContain('France');
