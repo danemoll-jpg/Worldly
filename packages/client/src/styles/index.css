@@ -303,18 +303,34 @@ button {
 /* ---------- App shell (quiz / lookup / mastery) ---------- */
 
 .app {
-  min-height: 100vh;
-  min-height: 100dvh;
+  /* height, not min-height: the quiz screens (header/prompt/map/answer-widget) are meant to
+     fit the viewport exactly, with the map flexing to whatever room is actually left over (see
+     .world-map-wrap below) — rather than a fixed map size that ignores its neighbors and lets
+     the whole page grow taller than the screen, forcing a scroll to reach the answer buttons.
+     dvh specifically (not vh) because it tracks the CURRENT visible area on mobile Safari,
+     shrinking/growing live as the address bar shows or hides, instead of being sized against
+     the largest-possible viewport and leaving a gap (or an overflow) once the chrome changes. */
+  height: 100vh;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.75rem;
-  padding: 1.25rem 0.75rem 2rem;
+  gap: 0.5rem;
+  /* env(safe-area-inset-*) only matters once installed via Add to Home Screen (see index.html)
+     — viewport-fit=cover lets the page draw under the iOS status bar/home-indicator area, so
+     this keeps real content (the back/restart buttons, the map) clear of them instead of
+     sitting behind the notch or the swipe-up bar; a no-op 0px everywhere else, including the
+     ordinary Safari tab this is normally viewed in. */
+  padding: max(0.85rem, env(safe-area-inset-top)) max(0.75rem, env(safe-area-inset-right)) max(0.85rem, env(safe-area-inset-bottom))
+    max(0.75rem, env(safe-area-inset-left));
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .quiz-header {
   width: 100%;
   max-width: min(96vw, 82rem);
+  flex: 0 0 auto; /* always its natural size — the map (flex: 1) is the only thing that yields space */
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -358,6 +374,7 @@ button {
   width: 100%;
   max-width: min(96vw, 82rem);
   min-height: 1.8rem;
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -382,8 +399,19 @@ button {
   position: relative;
   width: 100%;
   max-width: min(96vw, 82rem);
-  max-height: 74vh;
-  aspect-ratio: 960 / 500;
+  /* flex: 1 (not a fixed max-height/aspect-ratio) is what actually makes the fit-to-viewport
+     layout work — the map claims whatever vertical room is left over after the header/prompt/
+     answer-widget around it take their own natural height, shrinking automatically on a short
+     screen (a two-line prompt, a landscape phone, Safari's address bar showing) instead of the
+     old fixed 74vh cap, which had no idea how tall its neighbors actually were and could
+     overflow the viewport right along with them. min-height: 0 overrides flexbox's default
+     min-height: auto, which would otherwise refuse to shrink the map below its content size and
+     defeat the whole thing. No CSS aspect-ratio needed: the SVG inside keeps the map's own true
+     960:500 proportions regardless of the box's actual shape (see .world-map's width/height:
+     100% plus its default preserveAspectRatio), letterboxing on whichever axis doesn't match —
+     simpler and more robust than fighting flexbox and aspect-ratio for control of the same box. */
+  flex: 1 1 auto;
+  min-height: 0;
   background: var(--map-bg);
   border: 2px solid var(--accent);
   border-radius: 0.9rem;
@@ -542,6 +570,7 @@ button {
 .quiz-answer-form {
   width: 100%;
   max-width: 26rem;
+  flex: 0 0 auto;
   display: flex;
   gap: 0.5rem;
 }
@@ -630,6 +659,7 @@ button {
 .quiz-choice-grid {
   width: 100%;
   max-width: 30rem;
+  flex: 0 0 auto;
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 0.6rem;

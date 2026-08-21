@@ -2,9 +2,21 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>Worldly</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌍</text></svg>" />
+
+    <!-- Add-to-Home-Screen support: a website itself can't hide Safari's own address/tab bar
+         while it's open as an ordinary browser tab — that's Safari's UI, not the page's. This is
+         the actual, working way to get a chrome-free view of Worldly: from Safari's share sheet,
+         "Add to Home Screen" installs it as a standalone icon that launches full-screen, no
+         address bar or tabs at all, using the icons/colors declared below. -->
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Worldly" />
+    <meta name="theme-color" content="#0f1b2d" />
   </head>
   <body>
     <div id="root"></div>
