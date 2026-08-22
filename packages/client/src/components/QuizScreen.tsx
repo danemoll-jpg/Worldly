@@ -127,8 +127,14 @@ export function QuizScreen({ session, onAnswer, onSkip, onQuit, onRestart }: Qui
 
   const canSkip = !!current && !feedback && session.remaining.length > 1;
   // Continent mode is already a 6-way multiple choice — a hint would barely make it easier, so
-  // it's only offered for findIt/typeIt, where a "just guessing" moment is a real possibility.
+  // it's only offered for findIt/typeIt/multipleChoice, where a "just guessing" moment is a
+  // real possibility.
   const canHint = mode !== 'continent' && !!current && !feedback;
+  // findIt + 'country' is the one combination where the country's own name is already sitting
+  // right there in the prompt text ("Find: France") — "starts with F" would just be reading
+  // back a letter that's already on screen. The continent clue stays useful even then, since
+  // findIt's actual challenge is spatial (where to tap), not remembering the name.
+  const nameAlreadyShown = mode === 'findIt' && category === 'country';
 
   function promptLead(): React.ReactNode {
     if (mode === 'continent') {
@@ -202,7 +208,8 @@ export function QuizScreen({ session, onAnswer, onSkip, onQuit, onRestart }: Qui
             {canHint &&
               (hintRevealed ? (
                 <span className="quiz-hint quiz-hint--revealed">
-                  🤔 {current.country.continent} · starts with "{current.country.name[0]}"
+                  🤔 {current.country.continent}
+                  {!nameAlreadyShown && ` · starts with "${current.country.name[0]}"`}
                 </span>
               ) : (
                 <button type="button" className="quiz-hint" onClick={() => setHintRevealed(true)}>
