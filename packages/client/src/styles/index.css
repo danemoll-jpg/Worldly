@@ -48,7 +48,21 @@ html,
    one-liner (Safari 16+) doing the same job — both together for full coverage. Nothing on this
    page actually needs body-level scrolling: every screen manages its own height and, where it
    needs to scroll internally (the mastery map, the lookup list), does so in its own
-   overflow-y: auto container instead. */
+   overflow-y: auto container instead.
+
+   touch-action: pan-x pan-y is the OTHER half, for pinch-zoom specifically (a real gap in the
+   original fix): the viewport meta's maximum-scale=1/user-scalable=no (index.html) does nothing
+   on iOS/iPadOS Safari — it's been silently ignored there since iOS 10 for accessibility reasons,
+   full stop, regardless of what the page asks for. touch-action is the mechanism that actually
+   works: naming only pan-x/pan-y explicitly excludes pinch-zoom and double-tap-zoom while still
+   letting the browser handle ordinary one/two-finger scrolling wherever something asks for it
+   (touch-action isn't inherited normally, but a descendant can only be as permissive as its
+   ancestors — so this still lets the map svg's own touch-action: none stay in full effect, and
+   still lets any overflow-y: auto container scroll natively). Without this, a pinch gesture whose
+   fingers aren't BOTH precisely inside the map's own bounds (easy to do when zooming out — fingers
+   spread wide, off the map onto its border or the buttons overlaid on it) falls back to the
+   page's still-default touch-action: auto everywhere else, and the browser zooms the whole page
+   instead of the app knowing anything happened. */
 html {
   overflow: hidden;
 }
@@ -59,6 +73,7 @@ body {
   margin: 0;
   overflow: hidden;
   overscroll-behavior: none;
+  touch-action: pan-x pan-y;
   background: radial-gradient(circle at top, var(--bg-deep) 0%, var(--bg-deep-dark) 75%);
   color: var(--text-light);
 }
