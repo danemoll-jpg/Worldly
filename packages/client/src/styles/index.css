@@ -33,16 +33,34 @@
 }
 
 html,
-body,
 #root {
   height: 100%;
   margin: 0;
 }
 
+/* Pins the document itself in place so there's nothing for iPadOS/iOS Safari to rubber-band —
+   without this, a touch-drag on the world map (or anywhere else) can bleed into the BROWSER's
+   own elastic overscroll bounce of the whole page, on top of whatever the map's own pan/zoom is
+   doing, which reads as "everything is moving, not just the map." touch-action: none on the map
+   svg only stops the browser's native gesture handling on that one element — it doesn't stop the
+   page itself from still being a bounceable scroll container. Pinning body with position: fixed
+   is the old, universally-supported fix for that; overscroll-behavior: none is the modern
+   one-liner (Safari 16+) doing the same job — both together for full coverage. Nothing on this
+   page actually needs body-level scrolling: every screen manages its own height and, where it
+   needs to scroll internally (the mastery map, the lookup list), does so in its own
+   overflow-y: auto container instead. */
+html {
+  overflow: hidden;
+}
+
 body {
+  position: fixed;
+  inset: 0;
+  margin: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
   background: radial-gradient(circle at top, var(--bg-deep) 0%, var(--bg-deep-dark) 75%);
   color: var(--text-light);
-  min-height: 100vh;
 }
 
 h1,
@@ -61,6 +79,14 @@ button {
 .start-screen {
   min-height: 100vh;
   min-height: 100dvh;
+  /* height, not just min-height, PLUS its own overflow-y — body is now pinned (see above) and
+     can't scroll at all, so on a short/landscape viewport this is what lets a tall card (e.g.
+     SetupScreen with every filter open) still reach its Start button instead of getting clipped
+     with no way to scroll to it. */
+  height: 100vh;
+  height: 100dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -324,6 +350,7 @@ button {
   padding: max(0.85rem, env(safe-area-inset-top)) max(0.75rem, env(safe-area-inset-right)) max(0.85rem, env(safe-area-inset-bottom))
     max(0.75rem, env(safe-area-inset-left));
   overflow-y: auto;
+  overscroll-behavior: contain;
   overflow-x: hidden;
 }
 
@@ -745,6 +772,7 @@ button {
   max-width: 30rem;
   max-height: 16rem;
   overflow-y: auto;
+  overscroll-behavior: contain;
   border: 1px solid rgba(224, 164, 88, 0.3);
   border-radius: 0.6rem;
 }
@@ -785,6 +813,7 @@ button {
   width: 100%;
   max-height: 22rem;
   overflow-y: auto;
+  overscroll-behavior: contain;
   border: 1px solid rgba(224, 164, 88, 0.3);
   border-radius: 0.6rem;
 }
@@ -873,6 +902,7 @@ button {
   width: 100%;
   max-height: 90vh;
   overflow-y: auto;
+  overscroll-behavior: contain;
   text-align: center;
   box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.5);
 }
@@ -949,6 +979,7 @@ button {
   padding-left: 1.2rem;
   max-height: 8rem;
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .summary-misses__hint {
