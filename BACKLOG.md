@@ -16,6 +16,12 @@ _(nothing currently open — everything below is either shipped or deliberately 
 
 ## Done
 
+- **Flags stamped on answered countries** — "a good method of learning flags": once a country's
+  answered (this session, any category/mode), its flag emoji is stamped at its centroid on the
+  map, on top of the existing green/red tint, and stays there for the rest of the session —
+  incidental flag-learning out of ordinary play instead of a dedicated mode. Skipped for the
+  'flag' category (already the prompt for that question). `WorldMap`'s new optional `flagFor`
+  prop, `QuizScreen.tsx`. Commit `8304123`.
 - **Mastery map** — coloring every country by how well you know it (miss ratio → new/struggling/
   shaky/solid). Shipped as part of v1, not actually deferred — `MasteryScreen.tsx`, commit
   `93c65ab`.
