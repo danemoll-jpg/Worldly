@@ -7,6 +7,13 @@ interface WorldMapProps {
    * highlighted, right/wrong feedback, mastery-map coloring, ...); this component only knows
    * how to draw and how to pan/zoom/tap. */
   fillFor: (feature: MapFeature) => string;
+  /** Optional flag emoji to stamp at a shape's centroid, on top of its fill — e.g. QuizScreen
+   * shows the answered country's flag once it's been revealed, building a "learn the flags"
+   * effect out of ordinary play instead of needing a dedicated mode for it. Return null (or omit
+   * this prop entirely) for a feature that shouldn't show one right now. Purely decorative:
+   * counter-scaled the same way the tiny-country markers are so it stays a constant, legible
+   * size regardless of zoom, and doesn't affect hit-testing at all. */
+  flagFor?: (feature: MapFeature) => string | null;
   /** Fires for a genuine tap/click (not the tail end of a pan or pinch) on any shape —
    * including background-only territories; the caller decides whether to act on
    * `feature.quizzable`. Also fires for taps inside an inset box (see geo.ts's INSET_GROUPS). */
@@ -37,7 +44,7 @@ const AUTO_FOCUS_SCALE = 4;
  * about quiz state; it's purely "here are shapes, here's how to color them, tell me what got
  * tapped." Map data loads asynchronously (see lib/geo.ts) and is cached after the first load,
  * so every screen after the first shows it instantly. */
-export function WorldMap({ fillFor, onCountryTap, focusCountryId, className }: WorldMapProps) {
+export function WorldMap({ fillFor, flagFor, onCountryTap, focusCountryId, className }: WorldMapProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [features, setFeatures] = useState<MapFeature[] | null>(null);
   const [insets, setInsets] = useState<Inset[]>([]);
@@ -107,6 +114,25 @@ export function WorldMap({ fillFor, onCountryTap, focusCountryId, className }: W
               className={f.quizzable ? 'world-map__country' : 'world-map__country world-map__country--bg'}
             />
           ))}
+          {/* Flags for ordinary (non-tiny) countries — see flagFor's doc comment. Placed at the
+              same centroid the tiny-country markers use (a bounding-box center, computed for
+              every feature regardless of size, not just tiny ones) and counter-scaled the same
+              way so it stays a constant, legible size at any zoom. pointerEvents="none" so it's
+              purely decorative — never intercepts the tap meant for the country shape under it.
+              Tiny countries are handled separately below, alongside their own marker dot. */}
+          {flagFor &&
+            features.map((f, i) => {
+              if (f.isTiny) return null;
+              const flag = flagFor(f);
+              if (!flag) return null;
+              return (
+                <g key={`flag-${i}`} transform={`translate(${f.centroid[0]} ${f.centroid[1]}) scale(${1 / transform.scale})`}>
+                  <text className="world-map__flag" pointerEvents="none">
+                    {flag}
+                  </text>
+                </g>
+              );
+            })}
           {/* Tiny, geographically isolated countries (Nauru, Malta, Tuvalu, ...) render as
               slivers or single points at any practical zoom level — a real path click target
               for them would be sub-pixel. Drop a small dot at each one's centroid and counter-
@@ -130,6 +156,13 @@ export function WorldMap({ fillFor, onCountryTap, focusCountryId, className }: W
                   fill={fillFor(f)}
                   className={f.quizzable ? 'world-map__tiny-marker' : 'world-map__tiny-marker world-map__tiny-marker--bg'}
                 />
+                {/* Offset above the dot rather than on top of it — the dot's own color is still
+                    the correct/wrong signal, the flag sits alongside it instead of covering it. */}
+                {flagFor && flagFor(f) && (
+                  <text y={-9} className="world-map__flag" pointerEvents="none">
+                    {flagFor(f)}
+                  </text>
+                )}
               </g>
             ) : null,
           )}

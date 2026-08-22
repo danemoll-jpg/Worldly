@@ -103,6 +103,19 @@ export function QuizScreen({ session, onAnswer, onSkip, onQuit, onRestart }: Qui
     return 'var(--map-land)';
   }
 
+  // Once a country's been answered (this question's own feedback flash, or any earlier one this
+  // session — same "already answered" set fillFor's --map-answered/--map-missed tint uses), stamp
+  // its flag at its location for the rest of the session. Turns ordinary play into incidental
+  // flag-learning: by the end of a full-world quiz the whole map is labeled with flags you've
+  // now seen paired with their shapes, not just a one-second flash. Skipped for the 'flag'
+  // category specifically — the flag was already the prompt for that question, so showing it
+  // again on the map wouldn't teach anything new.
+  function flagFor(feature: MapFeature): string | null {
+    if (category === 'flag' || !feature.quizzable) return null;
+    const alreadyAnswered = (feedback && feature.id === feedback.result.countryId) || resultByCountry.has(feature.id);
+    return alreadyAnswered ? (COUNTRY_BY_ID[feature.id]?.flagEmoji ?? null) : null;
+  }
+
   function handleMapTap(feature: MapFeature) {
     if (!current || mode !== 'findIt' || !feature.quizzable || feedback) return;
     onAnswer({ type: 'findIt', clickedCountryId: feature.id });
@@ -223,7 +236,12 @@ export function QuizScreen({ session, onAnswer, onSkip, onQuit, onRestart }: Qui
         ) : null}
       </div>
 
-      <WorldMap fillFor={fillFor} onCountryTap={handleMapTap} focusCountryId={revealsLocationOnMap ? (current?.country.id ?? null) : null} />
+      <WorldMap
+        fillFor={fillFor}
+        flagFor={flagFor}
+        onCountryTap={handleMapTap}
+        focusCountryId={revealsLocationOnMap ? (current?.country.id ?? null) : null}
+      />
 
       {mode === 'typeIt' && current && (
         <form className="quiz-answer-form" onSubmit={handleTypeSubmit}>

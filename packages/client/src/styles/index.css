@@ -522,6 +522,16 @@ button {
   opacity: 0.85;
 }
 
+.world-map__flag {
+  /* Constant screen-size (see WorldMap.tsx's counter-scaling transform, same trick as
+     .world-map__tiny-marker) — an emoji glyph, not text, so text-anchor/dominant-baseline just
+     center it on its own counter-scaled <g> origin. */
+  font-size: 15px;
+  text-anchor: middle;
+  dominant-baseline: central;
+  user-select: none;
+}
+
 .world-map__inset {
   position: absolute;
   top: 0.6rem;
