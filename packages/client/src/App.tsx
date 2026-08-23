@@ -14,7 +14,15 @@ type Screen = 'home' | 'setup' | 'lookup' | 'mastery' | 'sync' | 'records' | 'da
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('home');
+  // Lets the summary screen's "View records" button jump to RecordsScreen and come straight
+  // BACK to that same summary (quiz.summary is untouched) instead of losing it the way changing
+  // `screen` to 'records' would — that branch only ever renders when quiz.summary is falsy.
+  const [viewingRecordsFromSummary, setViewingRecordsFromSummary] = useState(false);
   const quiz = useQuiz();
+
+  if (viewingRecordsFromSummary) {
+    return <RecordsScreen history={quiz.history} onBack={() => setViewingRecordsFromSummary(false)} />;
+  }
 
   // A quiz in progress or just-finished takes over the whole screen regardless of `screen` —
   // same "active game overrides navigation" shape as the rest of the series, just without a
@@ -27,6 +35,7 @@ export default function App() {
         config={quiz.config}
         personalBest={quiz.personalBest}
         onPlayAgain={quiz.playAgain}
+        onViewRecords={() => setViewingRecordsFromSummary(true)}
         onHome={() => {
           quiz.goHome();
           setScreen('home');

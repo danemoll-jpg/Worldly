@@ -159,7 +159,7 @@ export function WorldMap({ fillFor, flagFor, onCountryTap, focusCountryId, class
                 {/* Offset above the dot rather than on top of it — the dot's own color is still
                     the correct/wrong signal, the flag sits alongside it instead of covering it. */}
                 {flagFor && flagFor(f) && (
-                  <text y={-9} className="world-map__flag" pointerEvents="none">
+                  <text y={-15} className="world-map__flag" pointerEvents="none">
                     {flagFor(f)}
                   </text>
                 )}

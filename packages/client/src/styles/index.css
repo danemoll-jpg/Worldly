@@ -104,6 +104,17 @@ button {
   overscroll-behavior: contain;
   display: flex;
   align-items: center;
+  /* safe center: a well-known flexbox gotcha — when a centered flex child is TALLER than the
+     container (a real card, on a short/landscape iPad, easily is now that body can't bail it
+     out with its own scroll — 6 home-screen entries here is enough to trigger it), plain
+     `center` alignment splits the overflow evenly above and below, but only the BELOW half is
+     reachable by scrolling in most browsers — the top of the card (title, subtitle) stays
+     permanently cut off with no way to scroll up to it. `safe center` centers normally when
+     everything fits, and falls back to start-alignment (so the WHOLE card, top included, is
+     reachable by scrolling) the moment it doesn't. Layered after plain `center` so a browser
+     without `safe` support just keeps the old (imperfect but not broken) behavior instead of
+     getting an invalid property. */
+  align-items: safe center;
   justify-content: center;
   padding: 2rem 1rem;
 }
@@ -525,8 +536,10 @@ button {
 .world-map__flag {
   /* Constant screen-size (see WorldMap.tsx's counter-scaling transform, same trick as
      .world-map__tiny-marker) — an emoji glyph, not text, so text-anchor/dominant-baseline just
-     center it on its own counter-scaled <g> origin. */
-  font-size: 15px;
+     center it on its own counter-scaled <g> origin. Sized to actually read as "a flag," not a
+     small label — big enough that the shape/colors are legible at a glance, which is the whole
+     point of stamping it there in the first place. */
+  font-size: 26px;
   text-anchor: middle;
   dominant-baseline: central;
   user-select: none;
