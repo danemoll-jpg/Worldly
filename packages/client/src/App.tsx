@@ -5,6 +5,7 @@ import { LookupScreen } from './components/LookupScreen';
 import { MasteryScreen } from './components/MasteryScreen';
 import { QuizScreen } from './components/QuizScreen';
 import { RecordsScreen } from './components/RecordsScreen';
+import { ReviewMapScreen } from './components/ReviewMapScreen';
 import { SetupScreen } from './components/SetupScreen';
 import { SummaryScreen } from './components/SummaryScreen';
 import { SyncScreen } from './components/SyncScreen';
@@ -18,10 +19,17 @@ export default function App() {
   // BACK to that same summary (quiz.summary is untouched) instead of losing it the way changing
   // `screen` to 'records' would — that branch only ever renders when quiz.summary is falsy.
   const [viewingRecordsFromSummary, setViewingRecordsFromSummary] = useState(false);
+  // Same detour pattern for "Review map" — ReviewMapScreen just needs this session's own
+  // results, not any other quiz state.
+  const [reviewingMap, setReviewingMap] = useState(false);
   const quiz = useQuiz();
 
   if (viewingRecordsFromSummary) {
     return <RecordsScreen history={quiz.history} onBack={() => setViewingRecordsFromSummary(false)} />;
+  }
+
+  if (reviewingMap && quiz.summary) {
+    return <ReviewMapScreen results={quiz.summary.results} onBack={() => setReviewingMap(false)} />;
   }
 
   // A quiz in progress or just-finished takes over the whole screen regardless of `screen` —
@@ -36,6 +44,7 @@ export default function App() {
         personalBest={quiz.personalBest}
         onPlayAgain={quiz.playAgain}
         onViewRecords={() => setViewingRecordsFromSummary(true)}
+        onReviewMap={() => setReviewingMap(true)}
         onHome={() => {
           quiz.goHome();
           setScreen('home');

@@ -9,10 +9,11 @@ interface SummaryScreenProps {
   personalBest: PersonalBest | null;
   onPlayAgain: () => void;
   onViewRecords: () => void;
+  onReviewMap: () => void;
   onHome: () => void;
 }
 
-export function SummaryScreen({ summary, personalBest, onPlayAgain, onViewRecords, onHome }: SummaryScreenProps) {
+export function SummaryScreen({ summary, personalBest, onPlayAgain, onViewRecords, onReviewMap, onHome }: SummaryScreenProps) {
   // One combined "best," not independent accuracy/time badges — see storage.ts's
   // isBetterSession for why (ranks by accuracy first, time only as a tiebreaker), and so this
   // always names an actual run that happened, not a mix-and-match of your fastest run's time
@@ -61,6 +62,9 @@ export function SummaryScreen({ summary, personalBest, onPlayAgain, onViewRecord
         <div className="game-over__actions">
           <button type="button" className="game-over__button" onClick={onPlayAgain}>
             Play again
+          </button>
+          <button type="button" className="game-over__button game-over__button--secondary" onClick={onReviewMap}>
+            🗺️ Review map
           </button>
           <button type="button" className="game-over__button game-over__button--secondary" onClick={onViewRecords}>
             🏅 Records
