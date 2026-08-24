@@ -12,7 +12,34 @@ just forgotten.
 
 ## Open
 
-_(nothing currently open — everything below is either shipped or deliberately not planned)_
+- **Mystery "capitals" personal-best records — needs investigating.** On 8/23/2026 the user
+  found real `Find it (capitals)` records on the Records screen — Oceania 14% (1x), South
+  America 100% (3x), North America 100% (7x), Europe 89% (5x), all last played 8/20/2026 — and
+  is certain they never deliberately played capitals mode, on this or any device. Ruled out so
+  far by reading the code: no bug/mislabeling exists — a `SessionRecord` only ever gets
+  `category: 'capital'` when a session actually completes with that category selected
+  (`useQuiz.ts`); there's no seed/demo data (`loadHistory()` starts empty); Daily Challenge never
+  writes to this pipeline at all. Suspicious lead, not yet confirmed: 8/20-8/21/2026 is exactly
+  when the capitals category itself was built and shipped (commits `bf45b38`, `437fe19`, dated
+  2026-08-21) — the volume and spread (16 sessions across 4 regions, first attempt bad then
+  climbing to 100%) reads like systematic feature-verification testing from that build, not
+  accidental taps. Two live theories, neither confirmed: (a) that testing happened on a
+  synced-in device/browser (check whether a sync code is currently connected on the user's
+  device — `SyncScreen.tsx` — that would explain another device's sessions merging into this
+  history); (b) it was genuinely run against the live production site during that original build
+  and somehow reached this account, which would need reconstructing from whatever session did
+  that original build (predates traceable context here). Needs: confirm which theory is right,
+  then decide whether to just clear these specific stray records once the cause is nailed down.
+- **US states / state capitals / state flags quiz — new feature, not built.** Confirmed nothing
+  like this exists today: `countries.ts` is sovereign-nation data only (the one "United States"
+  row is the country itself, not its states), no `usStates.ts` or similar file exists anywhere in
+  the repo. Would need its own new dataset — 50 states, each with a capital and (unlike
+  countries, which get away with a `flagEmoji`) a real state flag image, since there's no emoji
+  set for US state flags — plus a way to pick "US States" as a distinct quiz universe in Setup,
+  parallel to but separate from the existing country/continent scope. Not scoped or designed
+  beyond this — first real step whenever it's picked up is deciding on a data source for the 50
+  state flag images (likely SVG, similar sourcing problem to how country flag data was originally
+  bulk-added).
 
 ## Done
 
