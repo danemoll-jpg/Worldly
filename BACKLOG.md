@@ -12,14 +12,29 @@ just forgotten.
 
 ## Open
 
-- **Brunei's hitbox is too small on the map.** Reported 8/24/2026 — hard to tap accurately on
-  `findIt`/mastery map. Brunei (`id: '096'` in `countries.ts`) is genuinely tiny on Borneo, so
-  this is likely the same "small country on a zoomed-out world map" problem as any other
-  postage-stamp-sized country (Singapore, Luxembourg, small Caribbean/Pacific island nations),
-  not something specific to Brunei's geometry — worth checking whether other small countries have
-  the same complaint before treating this as a one-off fix. Not investigated yet: where the tap
-  hit-testing lives (`WorldMap.tsx`/topojson feature geometry) and whether there's already a
-  minimum-tap-target/tolerance mechanism to extend to tiny countries, or whether one needs adding.
+- **Brunei's hitbox is too small on the map — likely Brunei-specific, not general tininess.**
+  Reported 8/24/2026 — user says they've missed it repeatedly while clicking right on it, and
+  explicitly does NOT have this problem with other small countries. Checked `geo.ts`'s existing
+  tiny-country system (`TINY_PRIMARY_DIMENSION` / `isTiny` / the marker-dot fallback that Vatican
+  City, Comoros, etc. already get) against the actual topojson data for Brunei (`id: '096'`):
+  Brunei is a `MultiPolygon` — a main landmass plus the separate Temburong exclave, split off by
+  Malaysia's Limbang corridor (real geography, not a data glitch). The PRIMARY piece (the main
+  landmass, correctly picked as larger by `projectFeature`'s area comparison) has a bounding-box
+  max dimension of ~1.1 `MAP_VIEWBOX` units — comfortably under the 2.2 threshold — so by the
+  code's own logic Brunei should ALREADY be classified `isTiny` and get the same big, forgiving
+  tap-marker treatment as any other tiny country, not the harder raw-outline hit-test. That's
+  what makes this suspicious rather than a duplicate of the general small-country case: something
+  in the marker path is likely failing specifically for Brunei. Leads not yet checked: (1) whether
+  the marker is actually rendering/registering for Brunei at runtime (vs. the math merely saying
+  it should) — worth literally inspecting the DOM/rendered SVG for country `096`; (2) whether the
+  two-piece `MultiPolygon` shape breaks something specific to multi-piece tiny countries that a
+  single-piece tiny country (most of the existing tiny list) never exercises — e.g. the centroid
+  used for marker placement is only the primary piece's bbox center, so if the marker LOOKS like
+  it's sitting somewhere that doesn't read as "on Brunei" to the eye, that mismatch could be why
+  accurate-looking clicks miss; (3) the adaptive tap-radius clustering (nearest other tiny-country
+  marker shrinks the radius) — check whether anything nearby is unexpectedly shrinking Brunei's
+  radius. Next step: reproduce with the actual rendered map open and inspect the marker
+  circle for `096` directly, rather than reasoning from the source alone.
 - **Mystery "capitals" personal-best records — needs investigating.** On 8/23/2026 the user
   found real `Find it (capitals)` records on the Records screen — Oceania 14% (1x), South
   America 100% (3x), North America 100% (7x), Europe 89% (5x), all last played 8/20/2026 — and
