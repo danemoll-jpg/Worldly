@@ -12,6 +12,17 @@ just forgotten.
 
 ## Open
 
+- **Seas and oceans quiz — new feature, not built.** Find/name bodies of water (oceans — Pacific,
+  Atlantic, Indian, Southern, Arctic — plus major seas — Mediterranean, Caribbean, Baltic, Red
+  Sea, etc.), the water equivalent of the existing country quiz. Confirmed the current map data
+  can't support this as-is: `countries-10m.json` only has `countries` and `land` topojson objects
+  — no water-body geometry at all, so this needs an entirely new geometry source (ocean/sea
+  boundary polygons), not just new quiz config on top of existing data, unlike the flags/capitals
+  category work which reused `countries.ts` untouched. Also an open question worth deciding before
+  building: seas nest inside oceans (Mediterranean is part of the Atlantic) and their boundaries
+  are conventional/fuzzy rather than hard-edged like country borders — may need its own
+  find-it/click-a-region interaction rather than assuming the exact `WorldMap` country-tap model
+  ports over cleanly. Not scoped beyond this.
 - **Brunei's hitbox is too small on the map — likely Brunei-specific, not general tininess.**
   Reported 8/24/2026 — user says they've missed it repeatedly while clicking right on it, and
   explicitly does NOT have this problem with other small countries. Checked `geo.ts`'s existing
