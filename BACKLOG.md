@@ -12,6 +12,14 @@ just forgotten.
 
 ## Open
 
+- **Brunei's hitbox is too small on the map.** Reported 8/24/2026 — hard to tap accurately on
+  `findIt`/mastery map. Brunei (`id: '096'` in `countries.ts`) is genuinely tiny on Borneo, so
+  this is likely the same "small country on a zoomed-out world map" problem as any other
+  postage-stamp-sized country (Singapore, Luxembourg, small Caribbean/Pacific island nations),
+  not something specific to Brunei's geometry — worth checking whether other small countries have
+  the same complaint before treating this as a one-off fix. Not investigated yet: where the tap
+  hit-testing lives (`WorldMap.tsx`/topojson feature geometry) and whether there's already a
+  minimum-tap-target/tolerance mechanism to extend to tiny countries, or whether one needs adding.
 - **Mystery "capitals" personal-best records — needs investigating.** On 8/23/2026 the user
   found real `Find it (capitals)` records on the Records screen — Oceania 14% (1x), South
   America 100% (3x), North America 100% (7x), Europe 89% (5x), all last played 8/20/2026 — and
