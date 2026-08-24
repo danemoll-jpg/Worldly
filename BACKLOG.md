@@ -12,6 +12,21 @@ just forgotten.
 
 ## Open
 
+- **Europe microstates inset dots are too small to tap reliably.** Reported 8/24/2026. Root cause
+  found: unlike the main map's tiny-country markers, which get a separate, generous invisible tap
+  radius layered on top of the visible dot (`tapRadiusFor` in `geo.ts`, 7-12 map units, well
+  beyond what's actually drawn), the inset dots (`WorldMap.tsx`, the `<circle>` at line ~214) have
+  no such padding — the visible dot IS the entire click target, `r={hasContext ? 4 : 7}` in the
+  inset's own viewBox units, nothing extra. For `europe-microstates` specifically (`hasContext:
+  true`, since it draws real Italy/France context — see `INSET_GROUPS`), that r=4 in a 250-unit-
+  wide viewBox rendered at up to `17rem` (~272px) CSS width works out to roughly an **8-9px
+  diameter** tap target — well under any real touch-target guideline (~44px is the usual Apple/
+  Google minimum). That also explains why it's specifically this cluster and not the Caribbean
+  one (`caribbean-states`, no context, r=7 in a differently-scaled box — closer to ~22px, still
+  smallish but noticeably more forgiving). Fix: give inset dots the same kind of padded, invisible
+  hit-target the main map's tiny-country markers already have (a larger transparent circle on top
+  of/around the small visible one, sized independent of the visible dot's radius), rather than
+  relying on the visible dot's own radius to double as the tap area.
 - **Crimea must be depicted as part of Ukraine, not Russia — deliberate decision, and currently
   wrong in the map data.** Explicit stance from the user (8/24/2026): regardless of the Russian
   occupation, Crimea belongs to Ukraine in this app — not a request to weigh in on other disputed
