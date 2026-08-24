@@ -12,6 +12,23 @@ just forgotten.
 
 ## Open
 
+- **Crimea must be depicted as part of Ukraine, not Russia — deliberate decision, and currently
+  wrong in the map data.** Explicit stance from the user (8/24/2026): regardless of the Russian
+  occupation, Crimea belongs to Ukraine in this app — not a request to weigh in on other disputed
+  territories, specifically this one, and it matters to them. Checked the actual map data behind
+  this claim rather than just logging an opinion: `countries-10m.json`'s Crimea geometry is
+  currently enclosed inside **Russia's** `MultiPolygon`, not Ukraine's — verified against five
+  points spread across the peninsula (Simferopol, Sevastopol, Yalta, Kerch, Armiansk), all five
+  landed inside Russia's rings and none in Ukraine's. This is a real, currently-live bug against
+  the user's stated intent, not just a philosophical note: today, tapping anywhere on Crimea while
+  playing "find Ukraine" scores wrong, and "find Russia" scores it right — the opposite of what's
+  wanted. Fix needs real geometry work, not a quiz-config change: either source replacement
+  boundary data for Ukraine/Russia that already draws Crimea as Ukrainian (some Natural Earth /
+  atlas boundary sets do, matching the convention most Western maps and the UN follow — worth
+  checking what `world-atlas`/Natural Earth versions offer before hand-editing), or surgically cut
+  Crimea's rings out of Russia's feature and merge them into Ukraine's `MultiPolygon` in the
+  existing topojson. Whichever approach, needs re-verifying with the same kind of point-in-polygon
+  check used to find this, across all of Crimea, before calling it fixed.
 - **Seas and oceans quiz — new feature, not built.** Find/name bodies of water (oceans — Pacific,
   Atlantic, Indian, Southern, Arctic — plus major seas — Mediterranean, Caribbean, Baltic, Red
   Sea, etc.), the water equivalent of the existing country quiz. Confirmed the current map data
