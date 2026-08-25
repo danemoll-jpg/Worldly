@@ -68,8 +68,17 @@ const TINY_PRIMARY_DIMENSION = 2.2;
  * (bbox ~1.7×3.7 units — comfortably over the 2.2 threshold) still renders as a sliver only a
  * a few CSS pixels wide, no easier to tap precisely than Vatican City. No other tiny-marker
  * country sits anywhere near it, so giving it the same marker/tap-radius treatment can't create
- * a marker-overlap conflict (see tapRadiusFor below). */
-const FORCE_TINY_IDS = new Set(['275']); // Palestine
+ * a marker-overlap conflict (see tapRadiusFor below).
+ *
+ * Brunei is the same problem for a different reason: it's a MultiPolygon (a main landmass plus
+ * the separate Temburong exclave, split off by Malaysia's Limbang corridor — real geography, not
+ * a data glitch), and its primary piece's bounding box (2.88×3.22 units) clears the threshold —
+ * but measuring the actual land inside that box (shoelace area vs. bbox area) shows it's only
+ * ~32% filled: a thin, jagged coastline, not a solid blob the size the bbox suggests. Reported by
+ * the user as "I click right on it and still miss" — exactly what a bbox-overstates-the-real-
+ * shape case looks like from the outside. Geographically isolated (nothing else tiny anywhere
+ * near Borneo), so same as Palestine: no marker-overlap risk from adding it here. */
+const FORCE_TINY_IDS = new Set(['275', '096']); // Palestine, Brunei
 
 /** Bounds on the adaptive tap radius (see MapFeature.tapRadius): MIN is deliberately bigger
  * than the marker's own visible-dot radius (see WorldMap.tsx) — a hit radius smaller than the

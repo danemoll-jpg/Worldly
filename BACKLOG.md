@@ -40,29 +40,6 @@ just forgotten.
   are conventional/fuzzy rather than hard-edged like country borders — may need its own
   find-it/click-a-region interaction rather than assuming the exact `WorldMap` country-tap model
   ports over cleanly. Not scoped beyond this.
-- **Brunei's hitbox is too small on the map — likely Brunei-specific, not general tininess.**
-  Reported 8/24/2026 — user says they've missed it repeatedly while clicking right on it, and
-  explicitly does NOT have this problem with other small countries. Checked `geo.ts`'s existing
-  tiny-country system (`TINY_PRIMARY_DIMENSION` / `isTiny` / the marker-dot fallback that Vatican
-  City, Comoros, etc. already get) against the actual topojson data for Brunei (`id: '096'`):
-  Brunei is a `MultiPolygon` — a main landmass plus the separate Temburong exclave, split off by
-  Malaysia's Limbang corridor (real geography, not a data glitch). The PRIMARY piece (the main
-  landmass, correctly picked as larger by `projectFeature`'s area comparison) has a bounding-box
-  max dimension of ~1.1 `MAP_VIEWBOX` units — comfortably under the 2.2 threshold — so by the
-  code's own logic Brunei should ALREADY be classified `isTiny` and get the same big, forgiving
-  tap-marker treatment as any other tiny country, not the harder raw-outline hit-test. That's
-  what makes this suspicious rather than a duplicate of the general small-country case: something
-  in the marker path is likely failing specifically for Brunei. Leads not yet checked: (1) whether
-  the marker is actually rendering/registering for Brunei at runtime (vs. the math merely saying
-  it should) — worth literally inspecting the DOM/rendered SVG for country `096`; (2) whether the
-  two-piece `MultiPolygon` shape breaks something specific to multi-piece tiny countries that a
-  single-piece tiny country (most of the existing tiny list) never exercises — e.g. the centroid
-  used for marker placement is only the primary piece's bbox center, so if the marker LOOKS like
-  it's sitting somewhere that doesn't read as "on Brunei" to the eye, that mismatch could be why
-  accurate-looking clicks miss; (3) the adaptive tap-radius clustering (nearest other tiny-country
-  marker shrinks the radius) — check whether anything nearby is unexpectedly shrinking Brunei's
-  radius. Next step: reproduce with the actual rendered map open and inspect the marker
-  circle for `096` directly, rather than reasoning from the source alone.
 - **US states / state capitals / state flags quiz — new feature, not built.** Confirmed nothing
   like this exists today: `countries.ts` is sovereign-nation data only (the one "United States"
   row is the country itself, not its states), no `usStates.ts` or similar file exists anywhere in
@@ -75,6 +52,21 @@ just forgotten.
   bulk-added).
 
 ## Done
+
+- **Brunei's hitbox was too small to tap reliably — fixed.** Root cause found by actually running
+  `getMapFeatures()` against the real topojson data (not just reasoning from the source): my
+  first-pass estimate used raw lon/lat degrees, which don't match the app's real projected
+  coordinate space (`geoNaturalEarth1().fitSize(...)`) — in that REAL space, Brunei's primary
+  landmass bounding box is 2.88×3.22 units, just clearing the 2.2 `isTiny` threshold, so it was
+  never getting the forgiving marker-dot treatment Vatican City/Palestine/etc. get. But measuring
+  the actual land inside that box (shoelace polygon area vs. bbox area) showed only a 32% fill —
+  a thin, jagged coastline (Brunei is a `MultiPolygon`: a main landmass plus the separate
+  Temburong exclave, split off by Malaysia's Limbang corridor), the exact "bounding box
+  overstates the real shape" problem `FORCE_TINY_IDS` already exists to patch for Palestine.
+  Fixed by adding Brunei's id (`096`) to that same set (`geo.ts`) — verified via the same
+  `getMapFeatures()` inspection that it now gets `isTiny: true` and a real `tapRadius` (12, the
+  max — nothing else tiny sits anywhere near Borneo, so no marker-overlap risk). Build passes,
+  engine suite green (51 tests).
 
 - **A real fix for the mystery "capitals" records: a "clear my stats & history" reset.**
   Investigated 8/23/2026 (no bug found — the stray capitals records were real completed sessions,
