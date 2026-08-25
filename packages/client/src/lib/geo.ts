@@ -82,6 +82,17 @@ const MAX_TAP_RADIUS = 12;
  * never exactly touch (avoids a razor's-edge boundary where the two are indistinguishable). */
 const TAP_RADIUS_MARGIN = 0.5;
 
+/** Same idea as MIN/MAX_TAP_RADIUS above, but for inset dots (Europe microstates, Caribbean) —
+ * a totally different, much smaller coordinate space (each inset's own small viewBox), so the
+ * main map's constants don't transfer. Without this, the visible dot itself (r=4 with real
+ * surrounding geography drawn, r=7 without) WAS the entire tap target — no padding at all,
+ * unlike every tiny country on the main map, which already gets a forgiving invisible tap
+ * radius layered under its visible dot. On screen that r=4 dot works out to roughly an 8-9px
+ * diameter target, well under any real touch-target size. */
+const INSET_MIN_TAP_RADIUS = 9;
+const INSET_MAX_TAP_RADIUS = 16;
+const INSET_TAP_RADIUS_MARGIN = 1;
+
 /** Clusters of tiny countries close enough together that no marker radius can tell taps apart
  * between them on the main map — each gets its own small, zoomed-in inset box instead (see
  * WorldMap.tsx), the same fix atlases and other geography references use for exactly this
@@ -129,6 +140,9 @@ export interface InsetFeature {
    * outline (see buildInset's comment for why). */
   cx: number;
   cy: number;
+  /** Radius (inset viewBox units) of an invisible, more forgiving tap target layered under the
+   * visible dot — see INSET_MIN_TAP_RADIUS below for why the visible dot alone isn't enough. */
+  tapRadius: number;
 }
 
 export interface InsetContextPath {
@@ -342,16 +356,33 @@ function buildInset(group: (typeof INSET_GROUPS)[number], geojson: any): Inset {
         .map((f: any) => ({ id: f.id as string, path: projectFeature(f, pathGenerator).path }))
     : [];
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const centroids = groupFeatures.map((f: any) => {
+    const [cx, cy] = pathGenerator.centroid(f);
+    return { id: f.id as string, cx, cy };
+  });
+
+  // Same adaptive idea as the main map's tapRadiusFor (see getMapFeatures): cap each dot's tap
+  // radius at half the distance to its nearest OTHER dot in this same inset, so two nearby
+  // countries' tap areas never overlap and steal each other's taps — a real risk here, since
+  // insets exist specifically for clusters of countries too close together for the main map's
+  // own radius logic to tell apart.
+  function tapRadiusFor(id: string, cx: number, cy: number): number {
+    let nearestDistance = Infinity;
+    for (const other of centroids) {
+      if (other.id === id) continue;
+      nearestDistance = Math.min(nearestDistance, Math.hypot(other.cx - cx, other.cy - cy));
+    }
+    const halfGap = nearestDistance / 2 - INSET_TAP_RADIUS_MARGIN;
+    return Math.min(INSET_MAX_TAP_RADIUS, Math.max(INSET_MIN_TAP_RADIUS, halfGap));
+  }
+
   return {
     id: group.id,
     label: group.label,
     viewBox: group.viewBox,
     contextPaths,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    features: groupFeatures.map((f: any) => {
-      const [cx, cy] = pathGenerator.centroid(f);
-      return { id: f.id as string, cx, cy };
-    }),
+    features: centroids.map((c: { id: string; cx: number; cy: number }) => ({ ...c, tapRadius: tapRadiusFor(c.id, c.cx, c.cy) })),
   };
 }
 

@@ -206,16 +206,27 @@ export function WorldMap({ fillFor, flagFor, onCountryTap, focusCountryId, class
                 const mainFeature = featureById.get(insetFeature.id);
                 if (!mainFeature) return null;
                 return (
-                  <circle
-                    key={insetFeature.id}
-                    data-country-id={insetFeature.id}
-                    cx={insetFeature.cx}
-                    cy={insetFeature.cy}
-                    r={hasContext ? 4 : 7}
-                    fill={fillFor(mainFeature)}
-                    className="world-map__inset-country"
-                    onClick={() => onCountryTap?.(mainFeature)}
-                  />
+                  <g key={insetFeature.id}>
+                    {/* Invisible, more forgiving tap target under the visible dot — same idea as
+                        the main map's tiny-country markers (see MapFeature.tapRadius): the
+                        visible dot alone is too small a target to hit reliably on a touchscreen. */}
+                    <circle
+                      cx={insetFeature.cx}
+                      cy={insetFeature.cy}
+                      r={insetFeature.tapRadius}
+                      fill="transparent"
+                      onClick={() => onCountryTap?.(mainFeature)}
+                    />
+                    <circle
+                      data-country-id={insetFeature.id}
+                      cx={insetFeature.cx}
+                      cy={insetFeature.cy}
+                      r={hasContext ? 4 : 7}
+                      fill={fillFor(mainFeature)}
+                      className="world-map__inset-country"
+                      onClick={() => onCountryTap?.(mainFeature)}
+                    />
+                  </g>
                 );
               })}
             </svg>
