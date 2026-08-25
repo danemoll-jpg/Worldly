@@ -98,6 +98,7 @@ export default function App() {
         onCreate={quiz.createSync}
         onConnect={quiz.connectSync}
         onDisconnect={quiz.disconnectSync}
+        onReset={quiz.resetData}
       />
     );
   }

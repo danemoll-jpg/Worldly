@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { SyncStatus } from '../hooks/useQuiz';
+import { ConfirmDialog } from './ConfirmDialog';
 
 interface SyncScreenProps {
   syncCode: string | null;
@@ -9,15 +10,17 @@ interface SyncScreenProps {
   onCreate: () => void;
   onConnect: (code: string) => void;
   onDisconnect: () => void;
+  onReset: () => void;
 }
 
 /** Cross-device sync setup — a shared code (no account, same trust model as an online room
  * code elsewhere in this series) that ties your stats and history to a Firestore document
  * instead of just this one browser's localStorage. Purely additive: everything works locally
  * with zero setup either way. */
-export function SyncScreen({ syncCode, syncStatus, syncError, onBack, onCreate, onConnect, onDisconnect }: SyncScreenProps) {
+export function SyncScreen({ syncCode, syncStatus, syncError, onBack, onCreate, onConnect, onDisconnect, onReset }: SyncScreenProps) {
   const [joinCode, setJoinCode] = useState('');
   const [copied, setCopied] = useState(false);
+  const [confirmingReset, setConfirmingReset] = useState(false);
 
   function handleCopy() {
     if (!syncCode) return;
@@ -97,7 +100,35 @@ export function SyncScreen({ syncCode, syncStatus, syncError, onBack, onCreate, 
             {syncError && <div className="error-banner">{syncError}</div>}
           </>
         )}
+
+        <div className="sync-reset">
+          <button type="button" className="sync-reset__button" onClick={() => setConfirmingReset(true)}>
+            🗑️ Clear my stats &amp; history
+          </button>
+          <p className="start-screen__hint">
+            Wipes personal bests, session history, and weak-spots tracking back to nothing — on this device, and
+            in the shared sync doc too if you're connected. Use this to start clean if something's ever looked
+            wrong (a record you don't remember earning, stats you want to redo from scratch).
+          </p>
+        </div>
       </div>
+
+      {confirmingReset && (
+        <ConfirmDialog
+          title="Clear your stats & history?"
+          message={
+            connected
+              ? "This wipes your personal bests, full session history, and weak-spots tracking — on this device AND on every other device connected to this same sync code. This can't be undone."
+              : "This wipes your personal bests, full session history, and weak-spots tracking on this device. This can't be undone."
+          }
+          confirmLabel="Clear everything"
+          onConfirm={() => {
+            onReset();
+            setConfirmingReset(false);
+          }}
+          onCancel={() => setConfirmingReset(false)}
+        />
+      )}
     </div>
   );
 }

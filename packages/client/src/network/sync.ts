@@ -45,6 +45,19 @@ export async function createSyncCode(localStats: StatsMap, localHistory: Session
   return code;
 }
 
+/** Wipes an already-connected sync's shared doc down to a clean, empty slate — used by the
+ * "clear my stats & history" reset. A plain LOCAL clear alone wouldn't stick while connected:
+ * the Firestore doc is the single source of truth once synced (see this file's header comment),
+ * so the very next snapshot would just silently bring the old data straight back. Overwriting
+ * the doc itself (not a transaction — this is a deliberate full reset, not applying one more
+ * session) is what actually makes the reset stick, and pushes the clean slate out to every other
+ * device sharing this code too. */
+export async function resetSyncDoc(code: string): Promise<void> {
+  const now = Date.now();
+  const cleared: SyncDoc = { createdAt: now, updatedAt: now, stats: {}, history: [] };
+  await setDoc(syncRef(code), cleared);
+}
+
 /** Joins an existing sync code — folds whatever this device already has locally into the
  * shared copy (once; see the module doc comment), and returns the merged result so the caller
  * can adopt it immediately instead of waiting on the subscription's first tick. */

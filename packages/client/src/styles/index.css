@@ -322,6 +322,26 @@ button {
   font-weight: 600;
 }
 
+.sync-reset {
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  text-align: center;
+}
+
+.sync-reset__button {
+  /* Same "plainer than the danger-red confirm it opens" idea as .quiz-restart — this button
+     just opens the confirmation, it isn't itself the destructive action. */
+  padding: 0.4rem 0.8rem;
+  border-radius: 999px;
+  border: 1px solid var(--danger-red);
+  background: transparent;
+  color: var(--danger-red);
+  font-weight: 600;
+  font-size: 0.85rem;
+  opacity: 0.85;
+}
+
 /* ---------- Setup screen extras ---------- */
 
 .setup-screen__continents {

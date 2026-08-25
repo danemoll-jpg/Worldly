@@ -63,24 +63,6 @@ just forgotten.
   marker shrinks the radius) — check whether anything nearby is unexpectedly shrinking Brunei's
   radius. Next step: reproduce with the actual rendered map open and inspect the marker
   circle for `096` directly, rather than reasoning from the source alone.
-- **Mystery "capitals" personal-best records — needs investigating.** On 8/23/2026 the user
-  found real `Find it (capitals)` records on the Records screen — Oceania 14% (1x), South
-  America 100% (3x), North America 100% (7x), Europe 89% (5x), all last played 8/20/2026 — and
-  is certain they never deliberately played capitals mode, on this or any device. Ruled out so
-  far by reading the code: no bug/mislabeling exists — a `SessionRecord` only ever gets
-  `category: 'capital'` when a session actually completes with that category selected
-  (`useQuiz.ts`); there's no seed/demo data (`loadHistory()` starts empty); Daily Challenge never
-  writes to this pipeline at all. Suspicious lead, not yet confirmed: 8/20-8/21/2026 is exactly
-  when the capitals category itself was built and shipped (commits `bf45b38`, `437fe19`, dated
-  2026-08-21) — the volume and spread (16 sessions across 4 regions, first attempt bad then
-  climbing to 100%) reads like systematic feature-verification testing from that build, not
-  accidental taps. Two live theories, neither confirmed: (a) that testing happened on a
-  synced-in device/browser (check whether a sync code is currently connected on the user's
-  device — `SyncScreen.tsx` — that would explain another device's sessions merging into this
-  history); (b) it was genuinely run against the live production site during that original build
-  and somehow reached this account, which would need reconstructing from whatever session did
-  that original build (predates traceable context here). Needs: confirm which theory is right,
-  then decide whether to just clear these specific stray records once the cause is nailed down.
 - **US states / state capitals / state flags quiz — new feature, not built.** Confirmed nothing
   like this exists today: `countries.ts` is sovereign-nation data only (the one "United States"
   row is the country itself, not its states), no `usStates.ts` or similar file exists anywhere in
@@ -93,6 +75,21 @@ just forgotten.
   bulk-added).
 
 ## Done
+
+- **A real fix for the mystery "capitals" records: a "clear my stats & history" reset.**
+  Investigated 8/23/2026 (no bug found — the stray capitals records were real completed sessions,
+  most likely leftover feature-verification testing from when the capitals category itself
+  shipped, one day before the dates on those records) and the user decided the actual fix isn't
+  more forensics — it's just being able to wipe the slate and start clean, synced from here on.
+  Added: `resetSyncDoc` (`network/sync.ts`) overwrites an already-connected sync doc with an
+  empty `{stats: {}, history: []}` (a plain local clear alone wouldn't stick while connected —
+  the synced doc is the single source of truth and the next snapshot would just bring the old
+  data right back); `useQuiz.ts`'s new `resetData()` clears local storage AND the synced doc (if
+  connected) together; a "🗑️ Clear my stats & history" button + confirmation dialog on
+  `SyncScreen.tsx`, available whether synced or not. Also confirmed while building this: sync
+  already covers weak-spots tracking, not just personal-bests — `StatsMap` (what mastery/
+  weak-spots reads) is part of the same `SyncDoc` as `history`, so the existing one-button
+  "Start syncing" flow on the Home screen already keeps both in sync, no separate toggle needed.
 
 - **Europe microstates inset dots were too small to tap reliably — fixed.** Root cause: unlike
   the main map's tiny-country markers, which get a separate, generous invisible tap radius

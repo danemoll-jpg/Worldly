@@ -24,7 +24,7 @@ import {
   saveStats,
   SessionRecord,
 } from '../lib/storage';
-import { applySessionToSync, connectToSyncCode, createSyncCode, subscribeSyncDoc, SyncDoc } from '../network/sync';
+import { applySessionToSync, connectToSyncCode, createSyncCode, resetSyncDoc, subscribeSyncDoc, SyncDoc } from '../network/sync';
 import { clearSyncCode, getSavedSyncCode, saveSyncCode } from '../network/syncSession';
 
 export function continentsKey(continents: QuizConfig['continents']): string {
@@ -115,6 +115,21 @@ export function useQuiz() {
     setSyncError(null);
     // Local data (already mirrored throughout) just keeps being used going forward, purely
     // locally again — disconnecting never deletes anything, on this device or in the cloud.
+  }, []);
+
+  // A genuine "start over" — wipes stats AND history, locally and (if connected) in the shared
+  // sync doc too, so a stray/corrupted record (or just wanting a clean slate) doesn't linger on
+  // whichever device or code it's currently attached to. Deliberately separate from
+  // disconnectSync, which never deletes anything; this always does, sync or no sync.
+  const resetData = useCallback(async () => {
+    setStats({});
+    setHistory([]);
+    saveStats({});
+    saveHistory([]);
+    const { syncCode: currentSyncCode } = stateRef.current;
+    if (currentSyncCode) {
+      await resetSyncDoc(currentSyncCode);
+    }
   }, []);
 
   const start = useCallback(
@@ -227,5 +242,6 @@ export function useQuiz() {
     createSync,
     connectSync,
     disconnectSync,
+    resetData,
   };
 }
