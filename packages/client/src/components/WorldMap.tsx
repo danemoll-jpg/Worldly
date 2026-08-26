@@ -1,8 +1,26 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { getInsets, getMapFeatures, Inset, MAP_VIEWBOX, MapFeature } from '../lib/geo';
+import { getInsets, getMapFeatures, Inset, MAP_VIEWBOX, MapFeature, PointMarker } from '../lib/geo';
 import { usePanZoom } from '../lib/panZoom';
 
 interface WorldMapProps {
+  /** Findable point markers with no underlying country shape — the seas/oceans and US-states
+   * quizzes (see PointMarker's doc comment for why they're points, not polygons). Renders on top
+   * of the ordinary country layer using the exact same constant-on-screen-size, adaptive-tap-
+   * radius approach as the tiny-country markers below (counter-scaled against zoom). Omit
+   * entirely for the country quiz, which has no use for this layer. */
+  markers?: PointMarker[];
+  /** How to color/label a marker's visible dot — parallel to `fillFor`, just for `markers`
+   * instead of country shapes. Required whenever `markers` is passed. */
+  markerFillFor?: (marker: PointMarker) => string;
+  /** Fires for a tap on one of `markers` — parallel to `onCountryTap`. */
+  onMarkerTap?: (marker: PointMarker) => void;
+  /** Whether to draw the tiny-country dot markers and the microstate insets (Vatican City, the
+   * Caribbean cluster, ...) on top of the ordinary country shapes. Defaults to true — every
+   * existing caller (the country quiz, the mastery map, lookup) wants these. Set to false for a
+   * `markers`-only screen (seas/oceans, US states): those tiny-country dots are indistinguishable
+   * on sight from the quiz's OWN markers and aren't relevant to a non-country quiz anyway, so
+   * left on they'd just be confusing clutter mixed in with the real targets. */
+  showCountryMarkers?: boolean;
   /** How to color each shape — the caller decides everything (default fill, target
    * highlighted, right/wrong feedback, mastery-map coloring, ...); this component only knows
    * how to draw and how to pan/zoom/tap. */
@@ -44,7 +62,17 @@ const AUTO_FOCUS_SCALE = 4;
  * about quiz state; it's purely "here are shapes, here's how to color them, tell me what got
  * tapped." Map data loads asynchronously (see lib/geo.ts) and is cached after the first load,
  * so every screen after the first shows it instantly. */
-export function WorldMap({ fillFor, flagFor, onCountryTap, focusCountryId, className }: WorldMapProps) {
+export function WorldMap({
+  fillFor,
+  flagFor,
+  onCountryTap,
+  markers,
+  markerFillFor,
+  onMarkerTap,
+  showCountryMarkers = true,
+  focusCountryId,
+  className,
+}: WorldMapProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [features, setFeatures] = useState<MapFeature[] | null>(null);
   const [insets, setInsets] = useState<Inset[]>([]);
@@ -68,8 +96,21 @@ export function WorldMap({ fillFor, flagFor, onCountryTap, focusCountryId, class
     return m;
   }, [features]);
 
+  const markerById = useMemo(() => {
+    const m = new Map<string, PointMarker>();
+    for (const marker of markers ?? []) m.set(marker.id, marker);
+    return m;
+  }, [markers]);
+
   function handleTap(target: Element | null) {
-    if (!target || !onCountryTap || !features) return;
+    if (!target) return;
+    const markerId = target.getAttribute('data-marker-id');
+    if (markerId !== null) {
+      const marker = markerById.get(markerId);
+      if (marker) onMarkerTap?.(marker);
+      return;
+    }
+    if (!onCountryTap || !features) return;
     const indexAttr = target.getAttribute('data-feature-index');
     if (indexAttr === null) return;
     const feature = features[Number(indexAttr)];
@@ -141,8 +182,9 @@ export function WorldMap({ fillFor, flagFor, onCountryTap, focusCountryId, class
               (Vatican City/San Marino, the Caribbean cluster) skip this entirely — insetGroupId
               is set for those, and they're found via the inset boxes below instead, since no
               marker radius on the main map could tell them apart from their neighbors. */}
-          {features.map((f, i) =>
-            f.isTiny && !f.insetGroupId ? (
+          {showCountryMarkers &&
+            features.map((f, i) =>
+              f.isTiny && !f.insetGroupId ? (
               <g key={`tiny-${i}`} transform={`translate(${f.centroid[0]} ${f.centroid[1]}) scale(${1 / transform.scale})`}>
                 {/* An invisible, much more forgiving tap target layered under the visible dot —
                     at this scale a real fingertip is far wider than the dot itself, so hit-
@@ -166,6 +208,16 @@ export function WorldMap({ fillFor, flagFor, onCountryTap, focusCountryId, class
               </g>
             ) : null,
           )}
+          {/* Point markers for quiz universes with no boundary polygon at all (seas/oceans, US
+              states — see PointMarker's doc comment in geo.ts). Same constant-on-screen-size,
+              invisible-tap-radius-under-a-visible-dot approach as the tiny-country markers just
+              above, just driven by `markers` instead of `features`. */}
+          {markers?.map((marker) => (
+            <g key={marker.id} transform={`translate(${marker.x} ${marker.y}) scale(${1 / transform.scale})`}>
+              <circle data-marker-id={marker.id} r={marker.tapRadius} fill="transparent" pointerEvents="all" />
+              <circle data-marker-id={marker.id} r={5} fill={markerFillFor?.(marker) ?? '#888'} className="world-map__tiny-marker" />
+            </g>
+          ))}
         </g>
       </svg>
 
@@ -178,7 +230,7 @@ export function WorldMap({ fillFor, flagFor, onCountryTap, focusCountryId, class
           group has real surrounding geography worth showing (contextPaths — see INSET_GROUPS'
           contextBounds), it's drawn underneath as ordinary filled/clickable shapes, same as the
           main map, so the dots sit in visible context instead of a void. */}
-      {insets.map((inset) => {
+      {showCountryMarkers && insets.map((inset) => {
         const position = INSET_POSITION[inset.id] ?? 'top-left';
         const hasContext = inset.contextPaths.length > 0;
         return (

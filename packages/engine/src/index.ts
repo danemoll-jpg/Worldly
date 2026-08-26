@@ -5,3 +5,6 @@ export * from './weighting.js';
 export * from './session.js';
 export * from './stats.js';
 export * from './dailyChallenge.js';
+export * from './waterBodies.js';
+export * from './usStates.js';
+export * from './genericSession.js';

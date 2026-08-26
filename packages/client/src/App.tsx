@@ -9,9 +9,10 @@ import { ReviewMapScreen } from './components/ReviewMapScreen';
 import { SetupScreen } from './components/SetupScreen';
 import { SummaryScreen } from './components/SummaryScreen';
 import { SyncScreen } from './components/SyncScreen';
+import { WaterBodyQuizScreen } from './components/WaterBodyQuizScreen';
 import { useQuiz } from './hooks/useQuiz';
 
-type Screen = 'home' | 'setup' | 'lookup' | 'mastery' | 'sync' | 'records' | 'daily';
+type Screen = 'home' | 'setup' | 'lookup' | 'mastery' | 'sync' | 'records' | 'daily' | 'waterBodies';
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('home');
@@ -88,6 +89,10 @@ export default function App() {
     return <DailyChallengeScreen onBack={() => setScreen('home')} />;
   }
 
+  if (screen === 'waterBodies') {
+    return <WaterBodyQuizScreen onBack={() => setScreen('home')} />;
+  }
+
   if (screen === 'sync') {
     return (
       <SyncScreen
@@ -111,6 +116,7 @@ export default function App() {
       onRecords={() => setScreen('records')}
       onDaily={() => setScreen('daily')}
       onSync={() => setScreen('sync')}
+      onWaterBodies={() => setScreen('waterBodies')}
       syncStatus={quiz.syncStatus}
       syncCode={quiz.syncCode}
     />

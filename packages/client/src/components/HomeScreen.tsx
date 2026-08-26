@@ -10,11 +10,22 @@ interface HomeScreenProps {
   onRecords: () => void;
   onDaily: () => void;
   onSync: () => void;
+  onWaterBodies: () => void;
   syncStatus: SyncStatus;
   syncCode: string | null;
 }
 
-export function HomeScreen({ onStartQuiz, onBrowse, onMasteryMap, onRecords, onDaily, onSync, syncStatus, syncCode }: HomeScreenProps) {
+export function HomeScreen({
+  onStartQuiz,
+  onBrowse,
+  onMasteryMap,
+  onRecords,
+  onDaily,
+  onSync,
+  onWaterBodies,
+  syncStatus,
+  syncCode,
+}: HomeScreenProps) {
   const synced = syncStatus === 'synced' && !!syncCode;
   const daily = useDailyChallenge(COUNTRIES);
 
@@ -59,6 +70,11 @@ export function HomeScreen({ onStartQuiz, onBrowse, onMasteryMap, onRecords, onD
             <span className="home-screen__choice-emoji">🏅</span>
             <span className="home-screen__choice-title">Your records</span>
             <span className="home-screen__choice-sub">Best time and accuracy for every quiz setup you've completed.</span>
+          </button>
+          <button type="button" className="home-screen__choice" onClick={onWaterBodies}>
+            <span className="home-screen__choice-emoji">🌊</span>
+            <span className="home-screen__choice-title">Seas & oceans</span>
+            <span className="home-screen__choice-sub">Find the 5 oceans and the world's major seas.</span>
           </button>
           <button type="button" className="home-screen__choice" onClick={onSync}>
             <span className="home-screen__choice-emoji">🔄</span>

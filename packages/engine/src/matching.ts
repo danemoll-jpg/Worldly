@@ -3,7 +3,14 @@
 // `aliases` in countries.ts — and typing under untimed pressure still produces the occasional
 // typo, so exact-string matching would be unfair in both directions. This normalizes case,
 // accents, and punctuation, then accepts a small edit-distance tolerance scaled to word length.
-import { CountryDef } from './types.js';
+
+/** Structural rather than `CountryDef` so this also covers the newer non-country quiz universes
+ * (water bodies, US states — see genericSession.ts) that need the exact same lenient matching
+ * but aren't countries. Any `{name, aliases?}` shape works — CountryDef already satisfies it. */
+export interface MatchableItem {
+  name: string;
+  aliases?: string[];
+}
 
 function normalize(input: string): string {
   return input
@@ -44,13 +51,13 @@ function tolerance(len: number): number {
   return 2;
 }
 
-/** True if `submitted` is a reasonable answer for `country` — an exact match (after
+/** True if `submitted` is a reasonable answer for `item` — an exact match (after
  * normalizing) against its name or any alias, or a near-match within typo tolerance. */
-export function isAnswerCorrect(submitted: string, country: CountryDef): boolean {
+export function isAnswerCorrect(submitted: string, item: MatchableItem): boolean {
   const norm = normalize(submitted);
   if (!norm) return false;
 
-  const candidates = [country.name, ...(country.aliases ?? [])].map(normalize);
+  const candidates = [item.name, ...(item.aliases ?? [])].map(normalize);
   if (candidates.includes(norm)) return true;
 
   return candidates.some((candidate) => {

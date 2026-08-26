@@ -11,7 +11,7 @@
 // loads in parallel with the app shell and the browser can cache it independently.
 import { geoNaturalEarth1, geoPath } from 'd3-geo';
 import { feature } from 'topojson-client';
-import { COUNTRY_BY_ID } from '@worldly/engine';
+import { COUNTRY_BY_ID, US_STATES, WATER_BODIES } from '@worldly/engine';
 
 export interface MapFeature {
   /** Matches a CountryDef.id (see @worldly/engine) when `quizzable`; otherwise a raw id or a
@@ -395,12 +395,58 @@ function buildInset(group: (typeof INSET_GROUPS)[number], geojson: any): Inset {
   };
 }
 
+/** A single findable point on the main map — same idea as a tiny country's marker (see
+ * MapFeature.centroid/tapRadius), just for quiz universes with no boundary polygon at all
+ * (water bodies, US states — see waterBodies.ts/usStates.ts in @worldly/engine). `x`/`y` are
+ * already projected to MAP_VIEWBOX units via the exact same projection every country shape uses,
+ * so these render on WorldMap's existing SVG with no separate coordinate space to reconcile. */
+export interface PointMarker {
+  id: string;
+  name: string;
+  x: number;
+  y: number;
+  tapRadius: number;
+}
+
 interface MapData {
   features: MapFeature[];
   insets: Inset[];
+  waterBodyMarkers: PointMarker[];
+  usStateMarkers: PointMarker[];
 }
 
 let cachedPromise: Promise<MapData> | null = null;
+
+/** Same adaptive-tap-radius idea as the main map's tiny-country markers (see loadMapData's own
+ * tapRadiusFor): cap each point's hit radius at half the distance to its nearest OTHER point in
+ * the same marker set, so two nearby markers' tap areas never overlap and steal each other's
+ * taps — the exact problem that matters most here, since (unlike most tiny countries) these
+ * marker sets have real, deliberately-close clusters (the Baltic/North/Black Seas all crowd
+ * together; New England's state capitals are barely apart on a world-scale projection). */
+function projectPointMarkers<T extends { id: string; name: string; lon: number; lat: number }>(
+  items: T[],
+  projection: ReturnType<typeof geoNaturalEarth1>,
+  minRadius: number,
+  maxRadius: number,
+  margin: number,
+): PointMarker[] {
+  const projected = items
+    .map((item) => {
+      const p = projection([item.lon, item.lat]);
+      return p ? { id: item.id, name: item.name, x: p[0], y: p[1] } : null;
+    })
+    .filter((p): p is { id: string; name: string; x: number; y: number } => p !== null);
+
+  return projected.map((p) => {
+    let nearestDistance = Infinity;
+    for (const other of projected) {
+      if (other.id === p.id) continue;
+      nearestDistance = Math.min(nearestDistance, Math.hypot(other.x - p.x, other.y - p.y));
+    }
+    const halfGap = nearestDistance / 2 - margin;
+    return { ...p, tapRadius: Math.min(maxRadius, Math.max(minRadius, halfGap)) };
+  });
+}
 
 async function loadMapData(): Promise<MapData> {
   const response = await fetch(`${import.meta.env.BASE_URL}data/countries-10m.json`);
@@ -492,7 +538,13 @@ async function loadMapData(): Promise<MapData> {
 
   const insets = INSET_GROUPS.map((group) => buildInset(group, geojson));
 
-  return { features, insets };
+  // Same MIN/MAX_TAP_RADIUS bounds as the tiny-country markers — these render at the same scale
+  // (constant on-screen size, counter-scaled against zoom — see WorldMap.tsx), so the same
+  // touch-target sizing applies unchanged.
+  const waterBodyMarkers = projectPointMarkers(WATER_BODIES, projection, MIN_TAP_RADIUS, MAX_TAP_RADIUS, TAP_RADIUS_MARGIN);
+  const usStateMarkers = projectPointMarkers(US_STATES, projection, MIN_TAP_RADIUS, MAX_TAP_RADIUS, TAP_RADIUS_MARGIN);
+
+  return { features, insets, waterBodyMarkers, usStateMarkers };
 }
 
 function loadMapDataCached(): Promise<MapData> {
@@ -510,4 +562,16 @@ export function getMapFeatures(): Promise<MapFeature[]> {
  * getMapFeatures, just a different slice of the result. */
 export function getInsets(): Promise<Inset[]> {
   return loadMapDataCached().then((d) => d.insets);
+}
+
+/** Findable marker points for the seas/oceans quiz — see WATER_BODIES (@worldly/engine) and
+ * PointMarker's doc comment for why these are points, not real boundary polygons. */
+export function getWaterBodyMarkers(): Promise<PointMarker[]> {
+  return loadMapDataCached().then((d) => d.waterBodyMarkers);
+}
+
+/** Findable marker points (one per state capital) for the US states quiz — same reasoning as
+ * getWaterBodyMarkers: no per-state boundary polygon exists in the bundled map data. */
+export function getUsStateMarkers(): Promise<PointMarker[]> {
+  return loadMapDataCached().then((d) => d.usStateMarkers);
 }

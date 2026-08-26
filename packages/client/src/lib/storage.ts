@@ -28,6 +28,29 @@ export function saveStats(stats: StatsMap): void {
   }
 }
 
+/** Same shape as loadStats/saveStats, just under a caller-chosen key — used by the seas/oceans
+ * and US-states quizzes (see hooks/useGenericQuiz.ts), which each want their own independent
+ * StatsMap (miss-tracking for the weighted order + weak-spots scope) rather than sharing
+ * `worldlyStats`, whose ids are country ids from a completely different id space. Deliberately
+ * local-only, not wired into the cross-device sync pipeline (network/sync.ts) — see BACKLOG.md's
+ * writeup for these features for why that's a separate, not-yet-done step. */
+export function loadNamedStats(key: string): StatsMap {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as StatsMap) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function saveNamedStats(key: string, stats: StatsMap): void {
+  try {
+    localStorage.setItem(key, JSON.stringify(stats));
+  } catch {
+    // ignore — see saveStats
+  }
+}
+
 export interface SessionRecord {
   /** Unique per record — lets history merge across devices (see network/sync.ts) dedupe
    * reliably instead of guessing from completedAt alone. */
