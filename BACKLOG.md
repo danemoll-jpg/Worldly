@@ -16,6 +16,28 @@ _(nothing open right now — see Done below for what's shipped)_
 
 ## Done
 
+- **Seas/oceans + US-states quizzes: sync, personal-bests, and mastery-map integration —
+  shipped.** Both quizzes launched local-only for miss-tracking (see their own entries below);
+  the user asked to close that gap before the next deploy rather than ship it partial, wanting
+  everything bundled into one push (limited monthly deploy budget). `SyncDoc` gained
+  `waterBodyStats`/`waterBodyHistory`/`usStateStats`/`usStateHistory` (optional, same
+  field-absent-means-no-info-yet rule as `dailyChallenge`); the "clear my stats & history" reset
+  now covers all three quiz universes, not just countries. `useGenericQuiz.ts` became a pure,
+  externally-controlled session stepper instead of owning its own localStorage — `useQuiz.ts`
+  calls it twice and is the one place that actually persists/syncs, same reasoning as the daily
+  streak's centralization. `MasteryScreen` gained a Countries/Seas & oceans/US states tab
+  (the two new universes render as colored marker dots, same as their own quiz screens, since
+  there's no boundary geometry to fill in); `RecordsScreen` gained a section per universe.
+  Found and fixed along the way: the US-states quiz's category picker (name/flag/capital) never
+  actually reached `quiz.start()` — it silently stayed hard-defaulted to `'name'` no matter what
+  was picked, which the UI itself never revealed since the prompt display used a separate local
+  variable. Verified live against the real Firestore project: device A played full sessions in
+  all three configs (seas/oceans, US-states by name, US-states by capital) to completion,
+  confirmed the capitals run actually recorded `category: 'capital'` (not `'name'`), then device
+  B — which never played anything — saw the exact same records and mastery-map coloring the
+  moment it connected, and both devices ended up with all three universes' records cleared after
+  running the reset. Commit `657b66a`.
+
 - **Daily Challenge streak now syncs across devices — fixed.** `useDailyChallenge.ts` used to
   read/write only `localStorage` directly, never touching the sync pipeline personal bests and
   weak-spots history already go through — playing the daily challenge on one device tracked a
@@ -49,14 +71,15 @@ _(nothing open right now — see Done below for what's shipped)_
   since points don't overlap the way polygons would. New shared engine infra
   (`genericSession.ts`) generic over any `{id, name, aliases?}` item, reused by the US-states quiz
   below. `WaterBodyQuizScreen.tsx`, self-contained (setup → play → summary) rather than reusing
-  the country quiz's screens, whose config surface is much bigger than this quiz needs.
-  Local-only miss-tracking (not synced, no personal-bests/mastery-map integration — those were
-  built incrementally for the country quiz as separate features and nothing here asked for them).
-  Verified with a live Playwright smoke test against the running app (screenshots + a real
-  answer-flow click-through), which caught a real bug the build/typecheck couldn't: `WorldMap`'s
-  tiny-country dots (Vatican City, Nauru, ...) and microstate insets were rendering unconditionally
-  underneath the new water-body markers, visually indistinguishable from the real targets — fixed
-  with a new `showCountryMarkers` flag. Commit `8f6ad4e`.
+  the country quiz's screens, whose config surface is much bigger than this quiz needs. Shipped
+  local-only for miss-tracking at first (no sync/personal-bests/mastery-map integration); the user
+  asked for that closed out before the next deploy, so it was — see the sync/personal-bests/
+  mastery-map entry below, done the same day. Verified with a live Playwright smoke test against
+  the running app (screenshots + a real answer-flow click-through), which caught a real bug the
+  build/typecheck couldn't: `WorldMap`'s tiny-country dots (Vatican City, Nauru, ...) and
+  microstate insets were rendering unconditionally underneath the new water-body markers, visually
+  indistinguishable from the real targets — fixed with a new `showCountryMarkers` flag. Commit
+  `8f6ad4e`.
 
 - **US states / state capitals / state flags quiz — shipped.** All 50 states (not DC or
   territories — the backlog's own "50 states" framing), quizzable on name, capital, or flag, by
@@ -68,8 +91,9 @@ _(nothing open right now — see Done below for what's shipped)_
   whole-country shape, no internal state borders, so there's no real polygon to tap. Extended the
   seas/oceans decision by consistency (each state marked at its capital's coordinates, reusing the
   exact same marker infra) rather than re-litigating or guessing a different answer.
-  `UsStatesQuizScreen.tsx`, `usStates.ts`. Same scope boundary as seas/oceans: local-only
-  miss-tracking, no sync/records/mastery-map integration. Verified live (Playwright): state
+  `UsStatesQuizScreen.tsx`, `usStates.ts`. Same scope boundary as seas/oceans at first (local-only
+  miss-tracking, no sync/records/mastery-map) — closed the same day, see the entry below. Verified
+  live (Playwright): state
   markers cluster correctly over the US (dense in New England, Alaska/Hawaii correctly far afield),
   the flag category renders a real, correct SVG (spot-checked against Alabama/Texas/Colorado/New
   Mexico's actual flags), and a full answer round-trip works. Commit `1b71e6e`.
