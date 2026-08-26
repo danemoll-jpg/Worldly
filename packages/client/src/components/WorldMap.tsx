@@ -14,6 +14,12 @@ interface WorldMapProps {
   markerFillFor?: (marker: PointMarker) => string;
   /** Fires for a tap on one of `markers` — parallel to `onCountryTap`. */
   onMarkerTap?: (marker: PointMarker) => void;
+  /** Optional image URL to stamp above an answered marker, on top of its fill — the US-states
+   * quiz's equivalent of `flagFor` below (countries stamp a Unicode flag emoji; states have no
+   * such codepoint, so this is a real image instead — see UsStatesQuizScreen's flagSrc). Same
+   * "learn the flags out of ordinary play" effect, same skip-when-flag-IS-the-prompt rule.
+   * Ignored for `features` — this is markers-only. */
+  markerImageFor?: (marker: PointMarker) => string | null;
   /** Whether to draw the tiny-country dot markers and the microstate insets (Vatican City, the
    * Caribbean cluster, ...) on top of the ordinary country shapes. Defaults to true — every
    * existing caller (the country quiz, the mastery map, lookup) wants these. Set to false for a
@@ -68,6 +74,7 @@ export function WorldMap({
   onCountryTap,
   markers,
   markerFillFor,
+  markerImageFor,
   onMarkerTap,
   showCountryMarkers = true,
   focusCountryId,
@@ -216,6 +223,12 @@ export function WorldMap({
             <g key={marker.id} transform={`translate(${marker.x} ${marker.y}) scale(${1 / transform.scale})`}>
               <circle data-marker-id={marker.id} r={marker.tapRadius} fill="transparent" pointerEvents="all" />
               <circle data-marker-id={marker.id} r={5} fill={markerFillFor?.(marker) ?? '#888'} className="world-map__tiny-marker" />
+              {/* Offset above the dot, same reasoning as the tiny-country flag stamp below — the
+                  dot's own color is still the correct/wrong signal, the image sits alongside it
+                  instead of covering it. */}
+              {markerImageFor && markerImageFor(marker) && (
+                <image href={markerImageFor(marker)!} x={-8} y={-26} width={16} height={11} pointerEvents="none" />
+              )}
             </g>
           ))}
         </g>

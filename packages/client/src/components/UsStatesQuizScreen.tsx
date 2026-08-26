@@ -183,6 +183,19 @@ export function UsStatesQuizScreen({ quiz, stats, onViewRecords, onBack }: UsSta
     return 'var(--map-land)';
   }
 
+  // Once a state's been answered (this question's own feedback flash, or any earlier one this
+  // session), stamp its flag at its marker for the rest of the session — the state-quiz
+  // equivalent of QuizScreen's flagFor, building "learn the flags" out of ordinary play instead
+  // of a dedicated mode. Skipped for the 'flag' category specifically, same reason as there: the
+  // flag was already the prompt for that question, so showing it again wouldn't teach anything.
+  function markerImageFor(marker: PointMarker): string | null {
+    if (activeCategory === 'flag') return null;
+    const alreadyAnswered = (feedback && marker.id === feedback.countryId) || resultById.has(marker.id);
+    if (!alreadyAnswered) return null;
+    const state = US_STATE_BY_ID[marker.id];
+    return state ? flagSrc(state) : null;
+  }
+
   function handleMarkerTap(marker: PointMarker) {
     if (!current || mode !== 'findIt' || feedback) return;
     const answer: GenericAnswer = { type: 'findIt', clickedId: marker.id };
@@ -319,6 +332,7 @@ export function UsStatesQuizScreen({ quiz, stats, onViewRecords, onBack }: UsSta
         fillFor={() => 'var(--map-land)'}
         markers={markers}
         markerFillFor={markerFillFor}
+        markerImageFor={markerImageFor}
         onMarkerTap={handleMarkerTap}
         showCountryMarkers={false}
       />
