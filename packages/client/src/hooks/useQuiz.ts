@@ -5,6 +5,7 @@ import {
   COUNTRIES,
   dailyDateKey,
   isSessionComplete,
+  QuizAnswerResult,
   QuizConfig,
   QuizSessionState,
   SessionSummary,
@@ -13,33 +14,50 @@ import {
   startSession,
   submitAnswer,
   summarizeSession,
+  US_STATES,
+  WATER_BODIES,
 } from '@worldly/engine';
 import {
+  appendGenericHistory,
   appendHistory,
   DailyChallengeState,
+  GenericSessionRecord,
   loadDailyChallengeState,
+  loadGenericHistory,
   loadHistory,
+  loadNamedStats,
   loadStats,
   newSessionRecordId,
   PersonalBest,
   personalBestFor,
   saveDailyChallengeState,
+  saveGenericHistory,
   saveHistory,
+  saveNamedStats,
   saveStats,
   SessionRecord,
 } from '../lib/storage';
 import {
   applyDailyChallengeToSync,
+  applyGenericSessionToSync,
   applySessionToSync,
   connectToSyncCode,
   createSyncCode,
+  GenericSyncFields,
   resetSyncDoc,
   subscribeSyncDoc,
   SyncDoc,
+  SyncExtras,
 } from '../network/sync';
 import { clearSyncCode, getSavedSyncCode, saveSyncCode } from '../network/syncSession';
+import { useGenericQuiz } from './useGenericQuiz';
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+
+const WATER_BODY_STATS_KEY = 'worldlyWaterBodyStats';
+const WATER_BODY_HISTORY_KEY = 'worldlyWaterBodyHistory';
+const US_STATE_STATS_KEY = 'worldlyUsStateStats';
+const US_STATE_HISTORY_KEY = 'worldlyUsStateHistory';
 
 export function continentsKey(continents: QuizConfig['continents']): string {
   return continents === 'all' ? 'all' : [...continents].sort().join(',');
@@ -53,11 +71,20 @@ export type SyncStatus = 'idle' | 'connecting' | 'synced' | 'error';
  * turned on (see network/sync.ts), stats/history come from — and every completed session
  * writes to — a shared Firestore document instead, mirrored to localStorage as a fast-loading
  * cache. No bots, no opponents — this is a solo study tool, sync is the only "networked" thing
- * about it. */
+ * about it.
+ *
+ * Also the single owner of the seas/oceans and US-states quizzes' stats/history (via two
+ * `useGenericQuiz` instances below) and the daily-challenge streak — all three go through this
+ * SAME sync subscription/localStorage-mirror machinery the country quiz does, rather than each
+ * being its own hook with its own independent Firestore listener on the same document. */
 export function useQuiz() {
   const [stats, setStats] = useState<StatsMap>(() => loadStats());
   const [history, setHistory] = useState<SessionRecord[]>(() => loadHistory());
   const [dailyChallenge, setDailyChallenge] = useState<DailyChallengeState>(() => loadDailyChallengeState());
+  const [waterBodyStats, setWaterBodyStats] = useState<StatsMap>(() => loadNamedStats(WATER_BODY_STATS_KEY));
+  const [waterBodyHistory, setWaterBodyHistory] = useState<GenericSessionRecord[]>(() => loadGenericHistory(WATER_BODY_HISTORY_KEY));
+  const [usStateStats, setUsStateStats] = useState<StatsMap>(() => loadNamedStats(US_STATE_STATS_KEY));
+  const [usStateHistory, setUsStateHistory] = useState<GenericSessionRecord[]>(() => loadGenericHistory(US_STATE_HISTORY_KEY));
   const [session, setSession] = useState<QuizSessionState | null>(null);
   const [config, setConfig] = useState<QuizConfig | null>(null);
   const [summary, setSummary] = useState<SessionSummary | null>(null);
@@ -69,8 +96,8 @@ export function useQuiz() {
 
   // Always current inside callbacks without needing them as effect/callback dependencies —
   // avoids re-creating `answer` (and therefore anything memoized off it) on every stats tick.
-  const stateRef = useRef({ stats, history, dailyChallenge, syncCode });
-  stateRef.current = { stats, history, dailyChallenge, syncCode };
+  const stateRef = useRef({ stats, history, dailyChallenge, waterBodyStats, waterBodyHistory, usStateStats, usStateHistory, syncCode });
+  stateRef.current = { stats, history, dailyChallenge, waterBodyStats, waterBodyHistory, usStateStats, usStateHistory, syncCode };
 
   // Subscribe whenever a sync code is active (on mount, if one was remembered from a previous
   // session, and immediately after createSync/connectSync set one).
@@ -86,25 +113,46 @@ export function useQuiz() {
       setHistory(doc.history);
       saveStats(doc.stats);
       saveHistory(doc.history);
-      // Absent (not just empty) on a doc written before this field existed — leave whatever's
-      // already showing locally alone rather than treating "field missing" the same as "field
-      // present and empty," which would wipe a real local streak the first time an old doc is
-      // read after this shipped (see SyncDoc.dailyChallenge's doc comment).
+      // Every field below is absent (not just empty) on a doc written before it existed — leave
+      // whatever's already showing locally alone rather than treating "field missing" the same
+      // as "field present and empty," which would wipe real local progress the first time an old
+      // doc is read after a new field shipped (see SyncDoc's own doc comment).
       if (doc.dailyChallenge) {
         setDailyChallenge(doc.dailyChallenge);
         saveDailyChallengeState(doc.dailyChallenge);
+      }
+      if (doc.waterBodyStats) {
+        setWaterBodyStats(doc.waterBodyStats);
+        saveNamedStats(WATER_BODY_STATS_KEY, doc.waterBodyStats);
+      }
+      if (doc.waterBodyHistory) {
+        setWaterBodyHistory(doc.waterBodyHistory);
+        saveGenericHistory(WATER_BODY_HISTORY_KEY, doc.waterBodyHistory);
+      }
+      if (doc.usStateStats) {
+        setUsStateStats(doc.usStateStats);
+        saveNamedStats(US_STATE_STATS_KEY, doc.usStateStats);
+      }
+      if (doc.usStateHistory) {
+        setUsStateHistory(doc.usStateHistory);
+        saveGenericHistory(US_STATE_HISTORY_KEY, doc.usStateHistory);
       }
       setSyncStatus('synced');
     });
     return unsubscribe;
   }, [syncCode]);
 
+  function currentExtras(): SyncExtras {
+    const { dailyChallenge: d, waterBodyStats: wbs, waterBodyHistory: wbh, usStateStats: uss, usStateHistory: ush } = stateRef.current;
+    return { dailyChallenge: d, waterBodyStats: wbs, waterBodyHistory: wbh, usStateStats: uss, usStateHistory: ush };
+  }
+
   const createSync = useCallback(async () => {
     setSyncStatus('connecting');
     setSyncError(null);
     try {
-      const { stats: currentStats, history: currentHistory, dailyChallenge: currentDaily } = stateRef.current;
-      const code = await createSyncCode(currentStats, currentHistory, currentDaily);
+      const { stats: currentStats, history: currentHistory } = stateRef.current;
+      const code = await createSyncCode(currentStats, currentHistory, currentExtras());
       saveSyncCode(code);
       setSyncCode(code);
     } catch (err) {
@@ -117,8 +165,8 @@ export function useQuiz() {
     setSyncStatus('connecting');
     setSyncError(null);
     try {
-      const { stats: currentStats, history: currentHistory, dailyChallenge: currentDaily } = stateRef.current;
-      const merged = await connectToSyncCode(code, currentStats, currentHistory, currentDaily);
+      const { stats: currentStats, history: currentHistory } = stateRef.current;
+      const merged = await connectToSyncCode(code, currentStats, currentHistory, currentExtras());
       setStats(merged.stats);
       setHistory(merged.history);
       saveStats(merged.stats);
@@ -126,6 +174,22 @@ export function useQuiz() {
       if (merged.dailyChallenge) {
         setDailyChallenge(merged.dailyChallenge);
         saveDailyChallengeState(merged.dailyChallenge);
+      }
+      if (merged.waterBodyStats) {
+        setWaterBodyStats(merged.waterBodyStats);
+        saveNamedStats(WATER_BODY_STATS_KEY, merged.waterBodyStats);
+      }
+      if (merged.waterBodyHistory) {
+        setWaterBodyHistory(merged.waterBodyHistory);
+        saveGenericHistory(WATER_BODY_HISTORY_KEY, merged.waterBodyHistory);
+      }
+      if (merged.usStateStats) {
+        setUsStateStats(merged.usStateStats);
+        saveNamedStats(US_STATE_STATS_KEY, merged.usStateStats);
+      }
+      if (merged.usStateHistory) {
+        setUsStateHistory(merged.usStateHistory);
+        saveGenericHistory(US_STATE_HISTORY_KEY, merged.usStateHistory);
       }
       saveSyncCode(code.toUpperCase());
       setSyncCode(code.toUpperCase());
@@ -144,15 +208,26 @@ export function useQuiz() {
     // locally again — disconnecting never deletes anything, on this device or in the cloud.
   }, []);
 
-  // A genuine "start over" — wipes stats AND history, locally and (if connected) in the shared
-  // sync doc too, so a stray/corrupted record (or just wanting a clean slate) doesn't linger on
-  // whichever device or code it's currently attached to. Deliberately separate from
-  // disconnectSync, which never deletes anything; this always does, sync or no sync.
+  // A genuine "start over" — wipes stats AND history for every quiz universe (countries,
+  // seas/oceans, US states — all three read as "stats & history" to a player), locally and (if
+  // connected) in the shared sync doc too, so a stray/corrupted record (or just wanting a clean
+  // slate) doesn't linger on whichever device or code it's currently attached to. Deliberately
+  // separate from disconnectSync, which never deletes anything; this always does, sync or no
+  // sync. Deliberately does NOT touch the daily-challenge streak (see resetSyncDoc) — that reads
+  // as its own separate kind of thing to a player, not "stats" or "history."
   const resetData = useCallback(async () => {
     setStats({});
     setHistory([]);
     saveStats({});
     saveHistory([]);
+    setWaterBodyStats({});
+    setWaterBodyHistory([]);
+    saveNamedStats(WATER_BODY_STATS_KEY, {});
+    saveGenericHistory(WATER_BODY_HISTORY_KEY, []);
+    setUsStateStats({});
+    setUsStateHistory([]);
+    saveNamedStats(US_STATE_STATS_KEY, {});
+    saveGenericHistory(US_STATE_HISTORY_KEY, []);
     const { syncCode: currentSyncCode } = stateRef.current;
     if (currentSyncCode) {
       await resetSyncDoc(currentSyncCode);
@@ -184,6 +259,65 @@ export function useQuiz() {
       });
     }
   }, []);
+
+  // Shared by both useGenericQuiz instances below — same shape as `answer`'s completion branch,
+  // just parameterized by which pair of SyncDoc fields (and which localStorage keys) this
+  // universe uses.
+  function handleGenericComplete(
+    universeStats: StatsMap,
+    statsKey: string,
+    historyKey: string,
+    setUniverseStats: (s: StatsMap) => void,
+    setUniverseHistory: (h: GenericSessionRecord[]) => void,
+    syncFields: GenericSyncFields,
+    record: GenericSessionRecord,
+    results: QuizAnswerResult[],
+  ) {
+    const { syncCode: currentSyncCode } = stateRef.current;
+    if (currentSyncCode) {
+      applyGenericSessionToSync(currentSyncCode, syncFields, record, results)
+        .then(({ stats: nextStats, history: nextHistory }) => {
+          setUniverseStats(nextStats);
+          setUniverseHistory(nextHistory);
+          saveNamedStats(statsKey, nextStats);
+          saveGenericHistory(historyKey, nextHistory);
+        })
+        .catch(() => {
+          // Best-effort, same stance as the rest of sync — see `answer`'s completion branch.
+        });
+    } else {
+      const nextStats = applySessionToStats(universeStats, results);
+      setUniverseStats(nextStats);
+      saveNamedStats(statsKey, nextStats);
+      setUniverseHistory(appendGenericHistory(historyKey, record));
+    }
+  }
+
+  const waterBody = useGenericQuiz(WATER_BODIES, waterBodyStats, waterBodyHistory, (record, results) =>
+    handleGenericComplete(
+      stateRef.current.waterBodyStats,
+      WATER_BODY_STATS_KEY,
+      WATER_BODY_HISTORY_KEY,
+      setWaterBodyStats,
+      setWaterBodyHistory,
+      { statsField: 'waterBodyStats', historyField: 'waterBodyHistory' },
+      record,
+      results,
+    ),
+  );
+
+  const usStates = useGenericQuiz(US_STATES, usStateStats, usStateHistory, (record, results) =>
+    handleGenericComplete(
+      stateRef.current.usStateStats,
+      US_STATE_STATS_KEY,
+      US_STATE_HISTORY_KEY,
+      setUsStateStats,
+      setUsStateHistory,
+      { statsField: 'usStateStats', historyField: 'usStateHistory' },
+      record,
+      results,
+    ),
+  );
 
   const start = useCallback(
     (nextConfig: QuizConfig) => {
@@ -281,6 +415,12 @@ export function useQuiz() {
     stats,
     history,
     dailyChallenge,
+    waterBodyStats,
+    waterBodyHistory,
+    usStateStats,
+    usStateHistory,
+    waterBody,
+    usStates,
     session,
     config,
     summary,

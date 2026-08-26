@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import {
-  applySessionToStats,
   GenericAnswer,
   GenericQuizItem,
   GenericQuizMode,
@@ -8,41 +7,66 @@ import {
   GenericSessionState,
   GenericSessionSummary,
   isGenericSessionComplete,
+  QuizAnswerResult,
   skipGenericCurrent,
   startGenericSession,
   StatsMap,
   submitGenericAnswer,
   summarizeGenericSession,
 } from '@worldly/engine';
-import { loadNamedStats, saveNamedStats } from '../lib/storage';
+import { genericPersonalBestFor, GenericSessionRecord, newSessionRecordId, PersonalBest } from '../lib/storage';
 
 /** Shared session-management hook for the seas/oceans and US-states quizzes — the client-side
  * counterpart to genericSession.ts, same relationship useQuiz.ts has to session.ts, just scoped
- * down to what these two smaller quizzes actually need (no config surface beyond mode/scope, no
- * history/personal-bests/cross-device sync — see BACKLOG.md's writeup for why those stayed out
- * of v1). One instance of this hook is a self-contained "setup → play → summary" flow for a
- * single item set, identified by `storageKey` for its local miss-tracking StatsMap. */
-export function useGenericQuiz<T extends GenericQuizItem>(items: T[], storageKey: string) {
-  const [stats, setStats] = useState<StatsMap>(() => loadNamedStats(storageKey));
+ * down to what these two smaller quizzes actually need (no config surface beyond mode/scope/
+ * category, no continent filtering).
+ *
+ * Deliberately "controlled" rather than owning its own persisted state: `stats`/`history` come
+ * in as plain values (from useQuiz.ts, which owns the one live sync subscription + localStorage
+ * mirror for BOTH quiz universes — a second independent copy of that machinery per universe
+ * would just mean a second Firestore listener on the same document), and `onComplete` is how a
+ * finished session's record/results get back out to be persisted/synced. This hook itself only
+ * ever holds the ephemeral, never-persisted parts: the in-progress session, its config, and the
+ * summary/personal-best shown once it ends. */
+export function useGenericQuiz<T extends GenericQuizItem>(
+  items: T[],
+  stats: StatsMap,
+  history: GenericSessionRecord[],
+  onComplete: (record: GenericSessionRecord, results: QuizAnswerResult[]) => void,
+) {
   const [session, setSession] = useState<GenericSessionState<T> | null>(null);
   const [summary, setSummary] = useState<GenericSessionSummary | null>(null);
-  const [config, setConfig] = useState<{ mode: GenericQuizMode; scope: GenericQuizScope } | null>(null);
+  const [config, setConfig] = useState<{ mode: GenericQuizMode; scope: GenericQuizScope; category: string } | null>(null);
+  const [personalBest, setPersonalBest] = useState<PersonalBest | null>(null);
 
-  function start(mode: GenericQuizMode, scope: GenericQuizScope) {
-    setConfig({ mode, scope });
+  function start(mode: GenericQuizMode, scope: GenericQuizScope, category: string = 'name') {
+    setConfig({ mode, scope, category });
     setSession(startGenericSession(items, mode, scope, stats));
     setSummary(null);
   }
 
   function answer(ans: GenericAnswer) {
     setSession((prev) => {
-      if (!prev) return prev;
+      if (!prev || !config) return prev;
       const next = submitGenericAnswer(prev, ans);
       if (isGenericSessionComplete(next)) {
-        const nextStats = applySessionToStats(stats, next.results);
-        setStats(nextStats);
-        saveNamedStats(storageKey, nextStats);
-        setSummary(summarizeGenericSession(next));
+        const finalSummary = summarizeGenericSession(next);
+        const record: GenericSessionRecord = {
+          id: newSessionRecordId(),
+          completedAt: Date.now(),
+          mode: config.mode,
+          scope: config.scope,
+          category: config.category,
+          totalQuestions: finalSummary.totalQuestions,
+          correctCount: finalSummary.correctCount,
+          percentCorrect: finalSummary.percentCorrect,
+          totalElapsedMs: finalSummary.totalElapsedMs,
+        };
+        // Compare against history BEFORE this session's own record joins it, same reasoning as
+        // useQuiz.ts's answer — "new best" means beating a previous run, not tying yourself.
+        setPersonalBest(genericPersonalBestFor(history, record.mode, record.scope, record.category));
+        setSummary(finalSummary);
+        onComplete(record, next.results);
       }
       return next;
     });
@@ -53,7 +77,7 @@ export function useGenericQuiz<T extends GenericQuizItem>(items: T[], storageKey
   }
 
   function playAgain() {
-    if (config) start(config.mode, config.scope);
+    if (config) start(config.mode, config.scope, config.category);
   }
 
   function goHome() {
@@ -62,5 +86,7 @@ export function useGenericQuiz<T extends GenericQuizItem>(items: T[], storageKey
     setConfig(null);
   }
 
-  return { stats, session, summary, config, start, answer, skip, playAgain, goHome };
+  return { session, summary, config, personalBest, start, answer, skip, playAgain, goHome };
 }
+
+export type GenericQuizController<T extends GenericQuizItem> = ReturnType<typeof useGenericQuiz<T>>;

@@ -1,17 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { GenericAnswer, masteryLevel, QuizAnswerResult, US_STATE_BY_ID, US_STATES, UsStateDef } from '@worldly/engine';
+import { GenericAnswer, masteryLevel, QuizAnswerResult, StatsMap, US_STATE_BY_ID, US_STATES, UsStateDef } from '@worldly/engine';
 import { getUsStateMarkers, PointMarker } from '../lib/geo';
-import { useGenericQuiz } from '../hooks/useGenericQuiz';
+import { GenericQuizController } from '../hooks/useGenericQuiz';
+import { isBetterSession } from '../lib/storage';
 import { WorldMap } from './WorldMap';
 
 interface UsStatesQuizScreenProps {
+  quiz: GenericQuizController<UsStateDef>;
+  stats: StatsMap;
+  onViewRecords: () => void;
   onBack: () => void;
 }
 
 type Category = 'name' | 'flag' | 'capital';
 
 const FEEDBACK_DISPLAY_MS = 1200;
-const STORAGE_KEY = 'worldlyUsStateStats';
 
 function flagSrc(state: UsStateDef): string {
   return `${import.meta.env.BASE_URL}data/flags/us-states/${state.id.toLowerCase()}.svg`;
@@ -29,9 +32,12 @@ function promptFor(category: Category, state: UsStateDef): { kind: 'text' | 'fla
  * capital's coordinates rather than real boundary shapes: `countries-10m.json` only has the USA
  * as one whole-country shape, no internal state borders — the same "no boundary geometry
  * available" situation as seas/oceans, so this reuses the exact same marker approach and the
- * exact same WorldMap `markers` layer (built for that quiz) rather than a second one. */
-export function UsStatesQuizScreen({ onBack }: UsStatesQuizScreenProps) {
-  const quiz = useGenericQuiz(US_STATES, STORAGE_KEY);
+ * exact same WorldMap `markers` layer (built for that quiz) rather than a second one.
+ *
+ * `quiz`/`stats` come from useQuiz.ts, which owns persistence/sync for this universe — this
+ * component is purely presentational over that controller, same relationship QuizScreen has to
+ * useQuiz's country-quiz state. */
+export function UsStatesQuizScreen({ quiz, stats, onViewRecords, onBack }: UsStatesQuizScreenProps) {
   const [feedback, setFeedback] = useState<QuizAnswerResult | null>(null);
   const [typedAnswer, setTypedAnswer] = useState('');
   const [markers, setMarkers] = useState<PointMarker[]>([]);
@@ -76,9 +82,17 @@ export function UsStatesQuizScreen({ onBack }: UsStatesQuizScreenProps) {
   }, [session?.current?.id]);
 
   const weakSpotCount = useMemo(
-    () => US_STATES.filter((s) => { const l = masteryLevel(quiz.stats[s.id]); return l === 'shaky' || l === 'struggling'; }).length,
-    [quiz.stats],
+    () => US_STATES.filter((s) => { const l = masteryLevel(stats[s.id]); return l === 'shaky' || l === 'struggling'; }).length,
+    [stats],
   );
+
+  // The category actually used for this session's own record (see quiz.start below) is whatever
+  // was picked BEFORE starting, frozen at that point — session-in-progress category display
+  // should track that frozen value (session.config.category), not the setup screen's still-live
+  // `category` state, which the player could in principle change again after starting if this
+  // screen re-rendered with the setup form still mounted (it doesn't, but this keeps the two
+  // concerns cleanly separated regardless).
+  const activeCategory = (quiz.config?.category as Category | undefined) ?? category;
 
   if (!session) {
     return (
@@ -142,7 +156,7 @@ export function UsStatesQuizScreen({ onBack }: UsStatesQuizScreenProps) {
             </span>
           </label>
 
-          <button type="button" className="start-screen__submit" onClick={() => quiz.start(pendingMode, pendingScope)}>
+          <button type="button" className="start-screen__submit" onClick={() => quiz.start(pendingMode, pendingScope, category)}>
             Start quiz
           </button>
         </div>
@@ -154,7 +168,7 @@ export function UsStatesQuizScreen({ onBack }: UsStatesQuizScreenProps) {
   const totalInSession = session.pool.length;
   const questionNumber = session.askedIds.length + (current ? 1 : 0);
   const mode = session.mode;
-  const prompt = current ? promptFor(category, current) : null;
+  const prompt = current ? promptFor(activeCategory, current) : null;
 
   function markerFillFor(marker: PointMarker): string {
     if (feedback && marker.id === feedback.countryId) {
@@ -183,18 +197,49 @@ export function UsStatesQuizScreen({ onBack }: UsStatesQuizScreenProps) {
 
   if (quiz.summary) {
     const summary = quiz.summary;
+    const isNewBest = !quiz.personalBest || isBetterSession(summary, quiz.personalBest);
+    const misses = summary.results.filter((r) => !r.correct);
     return (
       <div className="app">
         <div className="game-over">
           <div className="game-over__card">
-            <div className="game-over__emoji">{summary.percentCorrect >= 70 ? '🎉' : '📍'}</div>
-            <h2>Quiz complete!</h2>
-            <p>
-              {summary.correctCount} / {summary.totalQuestions} correct ({summary.percentCorrect}%).
-            </p>
+            <div className="game-over__emoji">🇺🇸</div>
+            <h2>
+              Quiz complete!
+              {isNewBest && <span className="new-record-badge">🏅 New best for this setup!</span>}
+            </h2>
+
+            <div className="summary-stats">
+              <div className="summary-stat">
+                <span className="summary-stat__value">{summary.percentCorrect}%</span>
+                <span className="summary-stat__label">Correct</span>
+              </div>
+              <div className="summary-stat">
+                <span className="summary-stat__value">
+                  {summary.correctCount}/{summary.totalQuestions}
+                </span>
+                <span className="summary-stat__label">Score</span>
+              </div>
+            </div>
+
+            {misses.length > 0 && (
+              <div className="summary-misses">
+                <h3>Missed this round</h3>
+                <ul>
+                  {misses.map((m) => (
+                    <li key={m.countryId}>{US_STATE_BY_ID[m.countryId]?.name ?? m.countryId}</li>
+                  ))}
+                </ul>
+                <p className="summary-misses__hint">These are now in your "weak spots" pool for next time.</p>
+              </div>
+            )}
+
             <div className="game-over__actions">
               <button type="button" className="game-over__button" onClick={quiz.playAgain}>
                 🔁 Play again
+              </button>
+              <button type="button" className="game-over__button game-over__button--secondary" onClick={onViewRecords}>
+                🏅 Records
               </button>
               <button
                 type="button"
@@ -216,14 +261,14 @@ export function UsStatesQuizScreen({ onBack }: UsStatesQuizScreenProps) {
   function promptLead(): React.ReactNode {
     if (!prompt || !current) return null;
     if (mode === 'findIt') {
-      if (category === 'name') {
+      if (activeCategory === 'name') {
         return (
           <span>
             Find: <strong>{current.name}</strong>
           </span>
         );
       }
-      const label = category === 'flag' ? 'this flag' : 'the capital';
+      const label = activeCategory === 'flag' ? 'this flag' : 'the capital';
       return (
         <span>
           Find the state with {label}:{' '}
@@ -231,8 +276,8 @@ export function UsStatesQuizScreen({ onBack }: UsStatesQuizScreenProps) {
         </span>
       );
     }
-    if (category === 'name') return <span>What state is highlighted?</span>;
-    const question = category === 'flag' ? 'Whose flag is this?' : 'Which state has this capital?';
+    if (activeCategory === 'name') return <span>What state is highlighted?</span>;
+    const question = activeCategory === 'flag' ? 'Whose flag is this?' : 'Which state has this capital?';
     return (
       <span>
         {question} {prompt.kind === 'flag' ? <img className="quiz-prompt__state-flag" src={prompt.content} alt="" /> : <strong>{prompt.content}</strong>}

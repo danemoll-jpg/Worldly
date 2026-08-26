@@ -27,7 +27,14 @@ export default function App() {
   const quiz = useQuiz();
 
   if (viewingRecordsFromSummary) {
-    return <RecordsScreen history={quiz.history} onBack={() => setViewingRecordsFromSummary(false)} />;
+    return (
+      <RecordsScreen
+        history={quiz.history}
+        waterBodyHistory={quiz.waterBodyHistory}
+        usStateHistory={quiz.usStateHistory}
+        onBack={() => setViewingRecordsFromSummary(false)}
+      />
+    );
   }
 
   if (reviewingMap && quiz.summary) {
@@ -79,11 +86,25 @@ export default function App() {
   }
 
   if (screen === 'mastery') {
-    return <MasteryScreen stats={quiz.stats} onBack={() => setScreen('home')} />;
+    return (
+      <MasteryScreen
+        stats={quiz.stats}
+        waterBodyStats={quiz.waterBodyStats}
+        usStateStats={quiz.usStateStats}
+        onBack={() => setScreen('home')}
+      />
+    );
   }
 
   if (screen === 'records') {
-    return <RecordsScreen history={quiz.history} onBack={() => setScreen('home')} />;
+    return (
+      <RecordsScreen
+        history={quiz.history}
+        waterBodyHistory={quiz.waterBodyHistory}
+        usStateHistory={quiz.usStateHistory}
+        onBack={() => setScreen('home')}
+      />
+    );
   }
 
   if (screen === 'daily') {
@@ -91,11 +112,25 @@ export default function App() {
   }
 
   if (screen === 'waterBodies') {
-    return <WaterBodyQuizScreen onBack={() => setScreen('home')} />;
+    return (
+      <WaterBodyQuizScreen
+        quiz={quiz.waterBody}
+        stats={quiz.waterBodyStats}
+        onViewRecords={() => setScreen('records')}
+        onBack={() => setScreen('home')}
+      />
+    );
   }
 
   if (screen === 'usStates') {
-    return <UsStatesQuizScreen onBack={() => setScreen('home')} />;
+    return (
+      <UsStatesQuizScreen
+        quiz={quiz.usStates}
+        stats={quiz.usStateStats}
+        onViewRecords={() => setScreen('records')}
+        onBack={() => setScreen('home')}
+      />
+    );
   }
 
   if (screen === 'sync') {

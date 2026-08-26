@@ -45,7 +45,8 @@ export function SyncScreen({ syncCode, syncStatus, syncError, onBack, onCreate, 
         </button>
         <h1>🔄 Sync devices</h1>
         <p className="start-screen__subtitle">
-          Keep your stats and history the same across every device — no account, just a code you enter on each one.
+          Keep your stats and history the same across every device — countries, seas &amp; oceans, US states, and
+          your daily-challenge streak, all under one code you enter on each device. No account.
         </p>
 
         {connected ? (
@@ -106,9 +107,11 @@ export function SyncScreen({ syncCode, syncStatus, syncError, onBack, onCreate, 
             🗑️ Clear my stats &amp; history
           </button>
           <p className="start-screen__hint">
-            Wipes personal bests, session history, and weak-spots tracking back to nothing — on this device, and
-            in the shared sync doc too if you're connected. Use this to start clean if something's ever looked
-            wrong (a record you don't remember earning, stats you want to redo from scratch).
+            Wipes personal bests, session history, and weak-spots tracking back to nothing — for countries, seas
+            &amp; oceans, and US states alike — on this device, and in the shared sync doc too if you're connected.
+            Doesn't touch your daily-challenge streak, that's its own separate thing. Use this to start clean if
+            something's ever looked wrong (a record you don't remember earning, stats you want to redo from
+            scratch).
           </p>
         </div>
       </div>
@@ -118,8 +121,8 @@ export function SyncScreen({ syncCode, syncStatus, syncError, onBack, onCreate, 
           title="Clear your stats & history?"
           message={
             connected
-              ? "This wipes your personal bests, full session history, and weak-spots tracking — on this device AND on every other device connected to this same sync code. This can't be undone."
-              : "This wipes your personal bests, full session history, and weak-spots tracking on this device. This can't be undone."
+              ? "This wipes your personal bests, full session history, and weak-spots tracking — for countries, seas & oceans, and US states — on this device AND on every other device connected to this same sync code. Your daily-challenge streak is untouched. This can't be undone."
+              : "This wipes your personal bests, full session history, and weak-spots tracking — for countries, seas & oceans, and US states — on this device. Your daily-challenge streak is untouched. This can't be undone."
           }
           confirmLabel="Clear everything"
           onConfirm={() => {

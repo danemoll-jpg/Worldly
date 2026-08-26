@@ -29,6 +29,17 @@ export function describeConfig(
   return `${modeLabel}${categoryLabel}${difficultyLabel} · ${scopeLabel} · ${regionLabel}`;
 }
 
+/** Same idea as describeConfig, for the seas/oceans and US-states quizzes' smaller config
+ * surface (mode + scope + a plain string category — no continents, no multiple-choice
+ * difficulty). `category` of 'name' describes as nothing (the plain/default prompt), same as
+ * 'country' does for describeConfig above. */
+export function describeGenericConfig(mode: 'findIt' | 'typeIt', scope: 'all' | 'weakSpots', category: string): string {
+  const modeLabel = mode === 'findIt' ? 'Find it' : 'Type it';
+  const categoryLabel = category === 'name' ? '' : ` (${category === 'flag' ? 'flags' : 'capitals'})`;
+  const scopeLabel = scope === 'weakSpots' ? 'weak spots only' : 'everything';
+  return `${modeLabel}${categoryLabel} · ${scopeLabel}`;
+}
+
 /** What to show as the quiz prompt for a given (category, country) pair — the answer is always
  * "identify the country" (see QuizCategory's doc comment); this just decides what's put in
  * front of the player to identify it FROM. 'flag' is deliberately its own `kind` rather than

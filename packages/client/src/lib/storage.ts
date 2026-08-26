@@ -32,9 +32,11 @@ export function saveStats(stats: StatsMap): void {
 /** Same shape as loadStats/saveStats, just under a caller-chosen key — used by the seas/oceans
  * and US-states quizzes (see hooks/useGenericQuiz.ts), which each want their own independent
  * StatsMap (miss-tracking for the weighted order + weak-spots scope) rather than sharing
- * `worldlyStats`, whose ids are country ids from a completely different id space. Deliberately
- * local-only, not wired into the cross-device sync pipeline (network/sync.ts) — see BACKLOG.md's
- * writeup for these features for why that's a separate, not-yet-done step. */
+ * `worldlyStats`, whose ids are country ids from a completely different id space. Local-only
+ * storage functions, same as loadStats/saveStats — but see network/sync.ts's SyncDoc.
+ * waterBodyStats/usStateStats: these DO now go through the same cross-device sync pipeline
+ * stats/history do, exactly like the country quiz, just kept in their own SyncDoc fields
+ * instead of sharing `stats`/`history` (different id spaces, different item shapes). */
 export function loadNamedStats(key: string): StatsMap {
   try {
     const raw = localStorage.getItem(key);
@@ -154,9 +156,11 @@ export function mergeDailyChallengeState(a: DailyChallengeState, b: DailyChallen
 
 /** Unions two independently-grown history lists (same one-time use as the engine's
  * mergeStatsMaps — see that function's doc comment), deduped by id, newest first, capped to
- * the usual history limit. */
-export function mergeHistory(a: SessionRecord[], b: SessionRecord[]): SessionRecord[] {
-  const byId = new Map<string, SessionRecord>();
+ * the usual history limit. Structural rather than SessionRecord-specific (just needs `id` and
+ * `completedAt`) so this also covers GenericSessionRecord below, the seas/oceans and US-states
+ * quizzes' own history shape — SessionRecord already satisfies it. */
+export function mergeHistory<T extends { id: string; completedAt: number }>(a: T[], b: T[]): T[] {
+  const byId = new Map<string, T>();
   for (const record of [...a, ...b]) byId.set(record.id, record);
   return Array.from(byId.values())
     .sort((x, y) => y.completedAt - x.completedAt)
@@ -258,6 +262,100 @@ export function groupHistoryByConfig(history: SessionRecord[]): ConfigRecord[] {
         multipleChoiceDifficulty: records[0].multipleChoiceDifficulty,
         scope: records[0].scope as 'all', // never 'weakSpots' — filtered out above
         continentsKey: records[0].continentsKey,
+        timesPlayed: records.length,
+        bestPercentCorrect: best.percentCorrect,
+        bestTimeMs: best.totalElapsedMs,
+        bestTotalQuestions: best.totalQuestions,
+        lastPlayedAt: Math.max(...records.map((r) => r.completedAt)),
+      };
+    })
+    .sort((a, b) => b.lastPlayedAt - a.lastPlayedAt);
+}
+
+// ---------- Seas/oceans + US-states quizzes: same shape as SessionRecord/PersonalBest/
+// ConfigRecord above, just for GenericQuizItem-based sessions (genericSession.ts) instead of
+// CountryDef ones. A smaller config surface (mode + scope + a plain string category, no
+// continents/multiple-choice-difficulty) is the whole reason this isn't just reusing
+// SessionRecord itself — most of its fields would be meaningless dead weight here.
+
+export interface GenericSessionRecord {
+  id: string;
+  completedAt: number;
+  mode: 'findIt' | 'typeIt';
+  scope: 'all' | 'weakSpots';
+  /** 'name' (or, for the water-bodies quiz, always 'name' — there's no category picker there)
+   * plus, for the US-states quiz, 'flag' | 'capital'. Kept as a plain string rather than a
+   * shared union with QuizCategory — country's 'country' vs. these quizzes' 'name' would be a
+   * confusing near-duplicate of the same idea under a different name for no real benefit. */
+  category: string;
+  totalQuestions: number;
+  correctCount: number;
+  percentCorrect: number;
+  totalElapsedMs: number;
+}
+
+export function loadGenericHistory(key: string): GenericSessionRecord[] {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as GenericSessionRecord[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveGenericHistory(key: string, history: GenericSessionRecord[]): void {
+  try {
+    localStorage.setItem(key, JSON.stringify(history.slice(0, MAX_HISTORY)));
+  } catch {
+    // ignore — see saveStats
+  }
+}
+
+export function appendGenericHistory(key: string, record: GenericSessionRecord): GenericSessionRecord[] {
+  const history = [record, ...loadGenericHistory(key)].slice(0, MAX_HISTORY);
+  saveGenericHistory(key, history);
+  return history;
+}
+
+/** Same idea as personalBestFor, just keyed by (mode, scope, category) instead of the country
+ * quiz's 5-field key — there's no continent/multiple-choice-difficulty dimension here. */
+export function genericPersonalBestFor(history: GenericSessionRecord[], mode: string, scope: string, category: string): PersonalBest | null {
+  const matches = history.filter((h) => h.mode === mode && h.scope === scope && h.category === category && h.totalQuestions > 0);
+  if (matches.length === 0) return null;
+  const best = matches.reduce((a, b) => (isBetterSession(b, a) ? b : a));
+  return { percentCorrect: best.percentCorrect, totalElapsedMs: best.totalElapsedMs, totalQuestions: best.totalQuestions };
+}
+
+export interface GenericConfigRecord {
+  mode: GenericSessionRecord['mode'];
+  scope: Exclude<GenericSessionRecord['scope'], 'weakSpots'>;
+  category: string;
+  timesPlayed: number;
+  bestPercentCorrect: number;
+  bestTimeMs: number;
+  bestTotalQuestions: number;
+  lastPlayedAt: number;
+}
+
+/** Same idea as groupHistoryByConfig, just keyed by (mode, scope, category) — see that
+ * function's doc comment for why 'weakSpots' sessions are excluded entirely. */
+export function groupGenericHistoryByConfig(history: GenericSessionRecord[]): GenericConfigRecord[] {
+  const groups = new Map<string, GenericSessionRecord[]>();
+  for (const record of history) {
+    if (record.totalQuestions === 0) continue;
+    if (record.scope === 'weakSpots') continue;
+    const key = `${record.mode}|${record.scope}|${record.category}`;
+    const existing = groups.get(key);
+    if (existing) existing.push(record);
+    else groups.set(key, [record]);
+  }
+  return Array.from(groups.values())
+    .map((records): GenericConfigRecord => {
+      const best = records.reduce((a, b) => (isBetterSession(b, a) ? b : a));
+      return {
+        mode: records[0].mode,
+        scope: records[0].scope as 'all', // never 'weakSpots' — filtered out above
+        category: records[0].category,
         timesPlayed: records.length,
         bestPercentCorrect: best.percentCorrect,
         bestTimeMs: best.totalElapsedMs,

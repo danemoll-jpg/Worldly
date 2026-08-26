@@ -1,15 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { GenericAnswer, masteryLevel, QuizAnswerResult, WATER_BODIES, WATER_BODY_BY_ID } from '@worldly/engine';
+import { GenericAnswer, masteryLevel, QuizAnswerResult, StatsMap, WaterBodyDef, WATER_BODIES, WATER_BODY_BY_ID } from '@worldly/engine';
 import { getWaterBodyMarkers, PointMarker } from '../lib/geo';
-import { useGenericQuiz } from '../hooks/useGenericQuiz';
+import { GenericQuizController } from '../hooks/useGenericQuiz';
+import { isBetterSession } from '../lib/storage';
 import { WorldMap } from './WorldMap';
 
 interface WaterBodyQuizScreenProps {
+  quiz: GenericQuizController<WaterBodyDef>;
+  stats: StatsMap;
+  onViewRecords: () => void;
   onBack: () => void;
 }
 
 const FEEDBACK_DISPLAY_MS = 1200;
-const STORAGE_KEY = 'worldlyWaterBodyStats';
 
 /** "Find the ocean/sea on the map, or type its name" — the water equivalent of the country
  * quiz, built on the shared genericSession/useGenericQuiz machinery instead of session.ts's
@@ -19,9 +22,12 @@ const STORAGE_KEY = 'worldlyWaterBodyStats';
  * mis-claiming a precise border. Self-contained (setup → play → summary in one screen) rather
  * than reusing SetupScreen/QuizScreen/SummaryScreen — those were built around the country quiz's
  * much larger config surface (category, continents, multiple-choice difficulty); this quiz's
- * surface is just mode + scope. */
-export function WaterBodyQuizScreen({ onBack }: WaterBodyQuizScreenProps) {
-  const quiz = useGenericQuiz(WATER_BODIES, STORAGE_KEY);
+ * surface is just mode + scope.
+ *
+ * `quiz`/`stats` come from useQuiz.ts, which owns persistence/sync for this universe — this
+ * component is purely presentational over that controller, same relationship QuizScreen has to
+ * useQuiz's country-quiz state. */
+export function WaterBodyQuizScreen({ quiz, stats, onViewRecords, onBack }: WaterBodyQuizScreenProps) {
   const [feedback, setFeedback] = useState<QuizAnswerResult | null>(null);
   const [typedAnswer, setTypedAnswer] = useState('');
   const [markers, setMarkers] = useState<PointMarker[]>([]);
@@ -64,7 +70,10 @@ export function WaterBodyQuizScreen({ onBack }: WaterBodyQuizScreenProps) {
     setTypedAnswer('');
   }, [session?.current?.id]);
 
-  const weakSpotCount = useMemo(() => WATER_BODIES.filter((w) => { const l = masteryLevel(quiz.stats[w.id]); return l === 'shaky' || l === 'struggling'; }).length, [quiz.stats]);
+  const weakSpotCount = useMemo(
+    () => WATER_BODIES.filter((w) => { const l = masteryLevel(stats[w.id]); return l === 'shaky' || l === 'struggling'; }).length,
+    [stats],
+  );
 
   if (!session) {
     return (
@@ -154,20 +163,58 @@ export function WaterBodyQuizScreen({ onBack }: WaterBodyQuizScreenProps) {
 
   if (quiz.summary) {
     const summary = quiz.summary;
+    const isNewBest = !quiz.personalBest || isBetterSession(summary, quiz.personalBest);
+    const misses = summary.results.filter((r) => !r.correct);
     return (
       <div className="app">
         <div className="game-over">
           <div className="game-over__card">
-            <div className="game-over__emoji">{summary.percentCorrect >= 70 ? '🎉' : '📍'}</div>
-            <h2>Quiz complete!</h2>
-            <p>
-              {summary.correctCount} / {summary.totalQuestions} correct ({summary.percentCorrect}%).
-            </p>
+            <div className="game-over__emoji">🌊</div>
+            <h2>
+              Quiz complete!
+              {isNewBest && <span className="new-record-badge">🏅 New best for this setup!</span>}
+            </h2>
+
+            <div className="summary-stats">
+              <div className="summary-stat">
+                <span className="summary-stat__value">{summary.percentCorrect}%</span>
+                <span className="summary-stat__label">Correct</span>
+              </div>
+              <div className="summary-stat">
+                <span className="summary-stat__value">
+                  {summary.correctCount}/{summary.totalQuestions}
+                </span>
+                <span className="summary-stat__label">Score</span>
+              </div>
+            </div>
+
+            {misses.length > 0 && (
+              <div className="summary-misses">
+                <h3>Missed this round</h3>
+                <ul>
+                  {misses.map((m) => (
+                    <li key={m.countryId}>{WATER_BODY_BY_ID[m.countryId]?.name ?? m.countryId}</li>
+                  ))}
+                </ul>
+                <p className="summary-misses__hint">These are now in your "weak spots" pool for next time.</p>
+              </div>
+            )}
+
             <div className="game-over__actions">
               <button type="button" className="game-over__button" onClick={quiz.playAgain}>
                 🔁 Play again
               </button>
-              <button type="button" className="game-over__button game-over__button--secondary" onClick={() => { quiz.goHome(); onBack(); }}>
+              <button type="button" className="game-over__button game-over__button--secondary" onClick={onViewRecords}>
+                🏅 Records
+              </button>
+              <button
+                type="button"
+                className="game-over__button game-over__button--secondary"
+                onClick={() => {
+                  quiz.goHome();
+                  onBack();
+                }}
+              >
                 🏠 Home
               </button>
             </div>

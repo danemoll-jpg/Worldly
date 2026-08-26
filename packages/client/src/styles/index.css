@@ -876,6 +876,18 @@ button {
 
 /* ---------- Records screen ---------- */
 
+/* One per quiz universe (countries, seas/oceans, US states) — each with its own .records-list
+   right below it. */
+.records-section-heading {
+  margin: 1.5rem 0 0.6rem;
+  font-size: 1.1rem;
+  color: var(--accent);
+}
+
+.records-section-heading:first-of-type {
+  margin-top: 0.5rem;
+}
+
 .records-list {
   list-style: none;
   padding: 0;
@@ -925,6 +937,17 @@ button {
   flex-shrink: 0;
   font-size: 0.9rem;
   white-space: nowrap;
+}
+
+/* ---------- Mastery universe picker ---------- */
+
+/* Reuses .start-screen__options' button-row look (see that rule) outside its usual
+   .start-screen__card context — MasteryScreen sits directly in the .app quiz-shell layout, so
+   this just adds the spacing that context would otherwise have provided. */
+.mastery-universe-picker {
+  max-width: 40rem;
+  margin: 0 auto 0.6rem;
+  padding: 0 0.75rem;
 }
 
 /* ---------- Mastery legend ---------- */
