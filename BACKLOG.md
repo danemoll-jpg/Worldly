@@ -96,7 +96,13 @@ _(nothing open right now — see Done below for what's shipped)_
   live (Playwright): state
   markers cluster correctly over the US (dense in New England, Alaska/Hawaii correctly far afield),
   the flag category renders a real, correct SVG (spot-checked against Alabama/Texas/Colorado/New
-  Mexico's actual flags), and a full answer round-trip works. Commit `1b71e6e`.
+  Mexico's actual flags), and a full answer round-trip works. Commit `1b71e6e`. One more parity
+  gap closed after the user asked directly whether it carried over: the country quiz stamps a
+  country's flag on the map once it's answered (see that Done entry below) — states had no
+  equivalent at first, since `WorldMap`'s existing flag-stamping is Unicode-emoji-only and states
+  use real image files. Added a parallel `markerImageFor` (an SVG `<image>` instead of `<text>`)
+  and wired it in with the same rules (skip for the 'flag' category itself, since that's already
+  the prompt). Commit `cb3c3e3`.
 
 - **Crimea now depicted as part of Ukraine, not Russia — fixed.** Went with the surgical-cut
   approach over sourcing replacement boundary data (the topojson's `countries` object turned out
