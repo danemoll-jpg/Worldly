@@ -12,6 +12,17 @@ just forgotten.
 
 ## Open
 
+- **Daily Challenge streak doesn't sync across devices — unlike the rest of the app.** Confirmed
+  in code (8/25/2026): `useDailyChallenge.ts` reads/writes only `localStorage` directly
+  (`worldlyDailyChallenge` key) — it never touches the sync pipeline (`network/sync.ts`) that
+  personal bests and weak-spots history go through. So if you play the daily challenge on one
+  device, that streak lives only there; open the app on another device (even one connected to the
+  same sync code) and it's tracking a completely separate streak. Surfaced by the user right after
+  the "clear my stats & history" reset feature shipped — a natural expectation once cross-device
+  sync exists at all is that "one shared question a day" also means one shared streak. Fix would
+  mean folding the daily-challenge state (`lastPlayedDateKey`/`lastPlayedCorrect`/`streak`) into
+  the same synced document `history`/`stats` already use, same idea as the reset feature's
+  `resetSyncDoc` — not started, not scoped beyond this.
 - **Crimea must be depicted as part of Ukraine, not Russia — deliberate decision, and currently
   wrong in the map data.** Explicit stance from the user (8/24/2026): regardless of the Russian
   occupation, Crimea belongs to Ukraine in this app — not a request to weigh in on other disputed
