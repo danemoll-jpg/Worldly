@@ -739,6 +739,18 @@ button {
   vertical-align: middle;
 }
 
+/* Same idea as .quiz-prompt__flag above, but for the US-states quiz's real SVG flag images
+   (countries use a Unicode emoji, states don't have one — see usStates.ts) — sized to read as
+   the whole prompt, same as the emoji version, with a thin border since several state flags are
+   white/pale and would otherwise blend into the card behind them. */
+.quiz-prompt__state-flag {
+  height: 2.4rem;
+  width: auto;
+  vertical-align: middle;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 2px;
+}
+
 /* ---------- Choice grid (continent mode + multiple choice) ---------- */
 
 .quiz-choice-grid {

@@ -11,6 +11,7 @@ interface HomeScreenProps {
   onDaily: () => void;
   onSync: () => void;
   onWaterBodies: () => void;
+  onUsStates: () => void;
   syncStatus: SyncStatus;
   syncCode: string | null;
 }
@@ -23,6 +24,7 @@ export function HomeScreen({
   onDaily,
   onSync,
   onWaterBodies,
+  onUsStates,
   syncStatus,
   syncCode,
 }: HomeScreenProps) {
@@ -75,6 +77,11 @@ export function HomeScreen({
             <span className="home-screen__choice-emoji">🌊</span>
             <span className="home-screen__choice-title">Seas & oceans</span>
             <span className="home-screen__choice-sub">Find the 5 oceans and the world's major seas.</span>
+          </button>
+          <button type="button" className="home-screen__choice" onClick={onUsStates}>
+            <span className="home-screen__choice-emoji">🇺🇸</span>
+            <span className="home-screen__choice-title">US states</span>
+            <span className="home-screen__choice-sub">All 50 states — names, capitals, and flags.</span>
           </button>
           <button type="button" className="home-screen__choice" onClick={onSync}>
             <span className="home-screen__choice-emoji">🔄</span>

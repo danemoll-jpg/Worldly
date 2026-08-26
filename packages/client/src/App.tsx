@@ -9,10 +9,11 @@ import { ReviewMapScreen } from './components/ReviewMapScreen';
 import { SetupScreen } from './components/SetupScreen';
 import { SummaryScreen } from './components/SummaryScreen';
 import { SyncScreen } from './components/SyncScreen';
+import { UsStatesQuizScreen } from './components/UsStatesQuizScreen';
 import { WaterBodyQuizScreen } from './components/WaterBodyQuizScreen';
 import { useQuiz } from './hooks/useQuiz';
 
-type Screen = 'home' | 'setup' | 'lookup' | 'mastery' | 'sync' | 'records' | 'daily' | 'waterBodies';
+type Screen = 'home' | 'setup' | 'lookup' | 'mastery' | 'sync' | 'records' | 'daily' | 'waterBodies' | 'usStates';
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('home');
@@ -93,6 +94,10 @@ export default function App() {
     return <WaterBodyQuizScreen onBack={() => setScreen('home')} />;
   }
 
+  if (screen === 'usStates') {
+    return <UsStatesQuizScreen onBack={() => setScreen('home')} />;
+  }
+
   if (screen === 'sync') {
     return (
       <SyncScreen
@@ -117,6 +122,7 @@ export default function App() {
       onDaily={() => setScreen('daily')}
       onSync={() => setScreen('sync')}
       onWaterBodies={() => setScreen('waterBodies')}
+      onUsStates={() => setScreen('usStates')}
       syncStatus={quiz.syncStatus}
       syncCode={quiz.syncCode}
     />
