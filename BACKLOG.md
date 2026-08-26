@@ -23,23 +23,6 @@ just forgotten.
   mean folding the daily-challenge state (`lastPlayedDateKey`/`lastPlayedCorrect`/`streak`) into
   the same synced document `history`/`stats` already use, same idea as the reset feature's
   `resetSyncDoc` — not started, not scoped beyond this.
-- **Crimea must be depicted as part of Ukraine, not Russia — deliberate decision, and currently
-  wrong in the map data.** Explicit stance from the user (8/24/2026): regardless of the Russian
-  occupation, Crimea belongs to Ukraine in this app — not a request to weigh in on other disputed
-  territories, specifically this one, and it matters to them. Checked the actual map data behind
-  this claim rather than just logging an opinion: `countries-10m.json`'s Crimea geometry is
-  currently enclosed inside **Russia's** `MultiPolygon`, not Ukraine's — verified against five
-  points spread across the peninsula (Simferopol, Sevastopol, Yalta, Kerch, Armiansk), all five
-  landed inside Russia's rings and none in Ukraine's. This is a real, currently-live bug against
-  the user's stated intent, not just a philosophical note: today, tapping anywhere on Crimea while
-  playing "find Ukraine" scores wrong, and "find Russia" scores it right — the opposite of what's
-  wanted. Fix needs real geometry work, not a quiz-config change: either source replacement
-  boundary data for Ukraine/Russia that already draws Crimea as Ukrainian (some Natural Earth /
-  atlas boundary sets do, matching the convention most Western maps and the UN follow — worth
-  checking what `world-atlas`/Natural Earth versions offer before hand-editing), or surgically cut
-  Crimea's rings out of Russia's feature and merge them into Ukraine's `MultiPolygon` in the
-  existing topojson. Whichever approach, needs re-verifying with the same kind of point-in-polygon
-  check used to find this, across all of Crimea, before calling it fixed.
 - **Seas and oceans quiz — new feature, not built.** Find/name bodies of water (oceans — Pacific,
   Atlantic, Indian, Southern, Arctic — plus major seas — Mediterranean, Caribbean, Baltic, Red
   Sea, etc.), the water equivalent of the existing country quiz. Confirmed the current map data
@@ -63,6 +46,27 @@ just forgotten.
   bulk-added).
 
 ## Done
+
+- **Crimea now depicted as part of Ukraine, not Russia — fixed.** Went with the surgical-cut
+  approach over sourcing replacement boundary data (the topojson's `countries` object turned out
+  to make this a clean, isolated edit, so replacing the whole boundary dataset wasn't needed).
+  Inspected the actual topojson structure: Russia's `MultiPolygon` geometry had Crimea as exactly
+  one self-contained polygon (`arcs[2]`, a single ring, no holes) — bbox 32.48–36.64°E /
+  44.38–46.22°N, matching the peninsula precisely, with no other Russia polygon anywhere near that
+  region (no separate islands/exclaves to also move). The two arcs making up that ring turned out
+  not to be shared with any Ukraine polygon at the data level (Ukraine's mainland border along the
+  Perekop isthmus uses different arc indices, 848 vs. Crimea's 847), so moving the polygon entry
+  from `russia.arcs` to `ukraine.arcs` in `countries-10m.json` was a self-contained edit — no arc
+  coordinates changed, no risk to any other country's geometry. Re-verified with the same
+  point-in-polygon method (`d3-geo`'s `geoContains`) used to find the bug, both the original 5
+  points (Simferopol, Sevastopol, Yalta, Kerch, Armiansk — now Ukraine, not Russia) and additional
+  spread points across the peninsula (Tarkhankut in the west, the Kerch peninsula in the east,
+  Sevastopol/Chersonesus, Feodosia, Dzhankoi) plus a mainland-Ukraine point just north of the
+  isthmus to confirm the cut boundary itself is still sane. No test file added — same as the
+  Brunei/Europe-microstates fixes below, there's no test harness for `geo.ts`/map-data at all
+  (`packages/client` has no test runner); verified by build (`tsc -b` + `vite build`) + the engine
+  suite staying green (51 tests) + the point-in-polygon script above, the same verification method
+  used to find the bug in the first place.
 
 - **Brunei's hitbox was too small to tap reliably — fixed.** Root cause found by actually running
   `getMapFeatures()` against the real topojson data (not just reasoning from the source): my
