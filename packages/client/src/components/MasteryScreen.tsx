@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { COUNTRIES, MasteryLevel, masteryLevel, StatsMap, US_STATES, WATER_BODIES } from '@worldly/engine';
-import { getUsStateMarkers, getWaterBodyMarkers, MapFeature, PointMarker } from '../lib/geo';
+import { getUsStateRegions, getWaterBodyRegions, MapFeature, MapRegion } from '../lib/geo';
 import { WorldMap } from './WorldMap';
 
 interface MasteryScreenProps {
@@ -34,22 +34,23 @@ const UNIVERSE_LABEL: Record<Universe, string> = {
 
 /** Colors every quizzable item by how it's actually gone for you — the payoff view for all that
  * miss-tracking, and a nice way to see progress at a glance instead of just as numbers. Covers
- * all three quiz universes now (a tab picker at top switches between them): countries render as
- * the real filled-in map shapes they always have; seas/oceans and US states — which have no
- * boundary geometry at all, see PointMarker's doc comment in geo.ts — render as the same colored
- * marker dots their own quiz screens use, just colored by mastery instead of session feedback. */
+ * all three quiz universes now (a tab picker at top switches between them), all as real filled
+ * shapes: countries render as the country map always has; seas/oceans and US states render as
+ * their own real region shapes (see MapRegion's doc comment in geo.ts), just colored by mastery
+ * instead of session feedback — same shapes their own quiz screens use, not the marker dots
+ * those started with before real boundary data existed for either. */
 export function MasteryScreen({ stats, waterBodyStats, usStateStats, onBack }: MasteryScreenProps) {
   const [universe, setUniverse] = useState<Universe>('countries');
-  const [waterBodyMarkers, setWaterBodyMarkers] = useState<PointMarker[]>([]);
-  const [usStateMarkers, setUsStateMarkers] = useState<PointMarker[]>([]);
+  const [waterBodyRegions, setWaterBodyRegions] = useState<MapRegion[]>([]);
+  const [usStateRegions, setUsStateRegions] = useState<MapRegion[]>([]);
 
   useEffect(() => {
     let cancelled = false;
-    getWaterBodyMarkers().then((loaded) => {
-      if (!cancelled) setWaterBodyMarkers(loaded);
+    getWaterBodyRegions().then((loaded) => {
+      if (!cancelled) setWaterBodyRegions(loaded);
     });
-    getUsStateMarkers().then((loaded) => {
-      if (!cancelled) setUsStateMarkers(loaded);
+    getUsStateRegions().then((loaded) => {
+      if (!cancelled) setUsStateRegions(loaded);
     });
     return () => {
       cancelled = true;
@@ -73,12 +74,19 @@ export function MasteryScreen({ stats, waterBodyStats, usStateStats, onBack }: M
     return LEVEL_COLOR[masteryLevel(stats[feature.id])];
   }
 
-  function waterBodyMarkerFillFor(marker: PointMarker): string {
-    return LEVEL_COLOR[masteryLevel(waterBodyStats[marker.id])];
+  function waterBodyRegionFillFor(region: MapRegion): string {
+    return LEVEL_COLOR[masteryLevel(waterBodyStats[region.id])];
   }
 
-  function usStateMarkerFillFor(marker: PointMarker): string {
-    return LEVEL_COLOR[masteryLevel(usStateStats[marker.id])];
+  function usStateRegionFillFor(region: MapRegion): string {
+    return LEVEL_COLOR[masteryLevel(usStateStats[region.id])];
+  }
+
+  // Mastery map always shows borders — there's no "hide until answered" concept here, so this is
+  // just a constant. (.world-map__region deliberately carries no CSS stroke color: a stylesheet
+  // rule would silently outrank whatever a caller passes here, so every caller must be explicit.)
+  function regionStrokeFor(): string {
+    return 'rgba(224, 164, 88, 0.55)';
   }
 
   return (
@@ -99,10 +107,26 @@ export function MasteryScreen({ stats, waterBodyStats, usStateStats, onBack }: M
 
       {universe === 'countries' && <WorldMap fillFor={fillFor} />}
       {universe === 'waterBodies' && (
-        <WorldMap fillFor={() => 'var(--map-land)'} markers={waterBodyMarkers} markerFillFor={waterBodyMarkerFillFor} showCountryMarkers={false} />
+        <WorldMap
+          fillFor={() => 'var(--map-land-inert)'}
+          countryLayerInert
+          className="world-map-wrap--water-quiz"
+          regions={waterBodyRegions}
+          regionFillFor={waterBodyRegionFillFor}
+          regionStrokeFor={regionStrokeFor}
+          showCountryMarkers={false}
+        />
       )}
       {universe === 'usStates' && (
-        <WorldMap fillFor={() => 'var(--map-land)'} markers={usStateMarkers} markerFillFor={usStateMarkerFillFor} showCountryMarkers={false} />
+        <WorldMap
+          fillFor={() => 'var(--map-land)'}
+          countryLayerInert
+          regions={usStateRegions}
+          regionFillFor={usStateRegionFillFor}
+          regionStrokeFor={regionStrokeFor}
+          showCountryMarkers={false}
+          focusCountryId="840"
+        />
       )}
 
       <div className="mastery-legend">

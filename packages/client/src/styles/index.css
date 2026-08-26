@@ -25,6 +25,14 @@
   --mastery-shaky: #e0a458;
   --mastery-solid: #4caf7d;
 
+  /* Seas/oceans quiz only: land needs to read as "not the thing you're looking for" at a
+     glance, distinctly non-blue rather than the same blue-gray every other screen uses for
+     land — see WaterBodyQuizScreen. --map-water is a clearly brighter, more saturated blue than
+     --map-bg (the app's general dark-navy background) specifically so "this is water, tap
+     anywhere in it" doesn't need the player to first find a named region's outline. */
+  --map-land-inert: #55565c;
+  --map-water: #1f6fa8;
+
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
 }
 
@@ -499,6 +507,12 @@ button {
   font-style: italic;
 }
 
+/* Seas/oceans quiz only — see --map-water's own comment. Passed as WorldMap's `className`, so
+   this overrides the plain .world-map-wrap background above for just that screen's map. */
+.world-map-wrap--water-quiz {
+  background: var(--map-water);
+}
+
 .world-map {
   width: 100%;
   height: 100%;
@@ -554,12 +568,12 @@ button {
 }
 
 .world-map__region {
-  /* Real, directly-tappable US-state borders — the US-states quiz's "with borders" option (see
-     UsStateRegion in geo.ts). A lighter, thinner border than .world-map__country: it's drawn on
-     top of the already-bordered flat country layer underneath, so a heavy stroke here would
-     compete with (and half-obscure) the coastline right under it instead of reading as an
-     internal state line. */
-  stroke: rgba(224, 164, 88, 0.55);
+  /* Real, directly-tappable US-state/water-body region borders (see UsStateRegion/WaterBodyRegion
+     in geo.ts). No `stroke` color here on purpose: a CSS stylesheet declaration always outranks an
+     SVG presentation attribute, so a hardcoded color here would silently override every caller's
+     `regionStrokeFor` — including the "hide outlines until answered" toggle, which needs a real
+     transparent/matching-fill stroke to actually disappear. Every caller must pass its own
+     `regionStrokeFor`; stroke-width alone is safe to keep constant here. */
   stroke-width: 1;
   cursor: pointer;
   transition: fill 0.2s ease;

@@ -1,39 +1,29 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { getInsets, getMapFeatures, Inset, MAP_VIEWBOX, MapFeature, MapRegion, PointMarker } from '../lib/geo';
+import { getInsets, getMapFeatures, Inset, MAP_VIEWBOX, MapFeature, MapRegion } from '../lib/geo';
 import { usePanZoom } from '../lib/panZoom';
 
 interface WorldMapProps {
-  /** Findable point markers with no underlying country shape — used when a quiz's `showBorders`-
-   * style toggle is off, or (before real boundary data was found) always, for seas/oceans and
-   * US states alike (see PointMarker's doc comment). Renders on top of the ordinary country
-   * layer using the exact same constant-on-screen-size, adaptive-tap-radius approach as the
-   * tiny-country markers below (counter-scaled against zoom). Omit entirely for the country
-   * quiz, which has no use for this layer. */
-  markers?: PointMarker[];
-  /** How to color/label a marker's visible dot — parallel to `fillFor`, just for `markers`
-   * instead of country shapes. Required whenever `markers` is passed. */
-  markerFillFor?: (marker: PointMarker) => string;
-  /** Fires for a tap on one of `markers` — parallel to `onCountryTap`. */
-  onMarkerTap?: (marker: PointMarker) => void;
-  /** Optional image URL to stamp above an answered marker, on top of its fill — the US-states
-   * quiz's equivalent of `flagFor` below (countries stamp a Unicode flag emoji; states have no
-   * such codepoint, so this is a real image instead — see UsStatesQuizScreen's flagSrc). Same
-   * "learn the flags out of ordinary play" effect, same skip-when-flag-IS-the-prompt rule.
-   * Ignored for `features` — this is markers-only. */
-  markerImageFor?: (marker: PointMarker) => string | null;
-  /** Real, bordered, directly-tappable shapes — the "with borders" option for both the
-   * US-states and seas/oceans quizzes (see MapRegion's doc comment for why both started
-   * marker-only and gained this later, once real boundary data was actually found for each).
-   * Mutually exclusive with `markers` in practice (a caller picks one or the other for a given
-   * render), but nothing here enforces that — they're independent layers. */
+  /** Real, bordered, directly-tappable shapes — the seas/oceans and US-states quizzes' map
+   * layer (see MapRegion's doc comment: both started as marker points, before real boundary
+   * data was found for each; the marker-dot rendering this component used to also support was
+   * removed once every caller had real borders to use instead — no reason to keep a cruder
+   * fallback around once nothing needs it). */
   regions?: MapRegion[];
-  /** How to color a region's fill — parallel to `fillFor`/`markerFillFor`. Required whenever
-   * `regions` is passed. */
+  /** How to color a region's fill — parallel to `fillFor`. Required whenever `regions` is
+   * passed. */
   regionFillFor?: (region: MapRegion) => string;
-  /** Fires for a tap on one of `regions` — parallel to `onCountryTap`/`onMarkerTap`. */
+  /** How to color a region's outline — parallel to `regionFillFor`. Defaults to the standard
+   * CSS border color when omitted; a caller can return `'transparent'` to hide a specific
+   * region's outline (e.g. "don't reveal state borders until this one's been answered" — see
+   * UsStatesQuizScreen/WaterBodyQuizScreen's `showOutlines` toggle) without touching its fill or
+   * its tappability, which stays driven by the real shape underneath either way. */
+  regionStrokeFor?: (region: MapRegion) => string;
+  /** Fires for a tap on one of `regions` — parallel to `onCountryTap`. */
   onRegionTap?: (region: MapRegion) => void;
-  /** Optional image URL to stamp at a region's centroid — parallel to `markerImageFor`, for
-   * `regions` instead of `markers`. */
+  /** Optional image URL to stamp at a region's centroid, on top of its fill — the region-layer
+   * equivalent of `flagFor` below (countries stamp a Unicode flag emoji; US states have no such
+   * codepoint, so this is a real image instead — see UsStatesQuizScreen's flagSrc). Same "learn
+   * the flags out of ordinary play" effect, same skip-when-flag-IS-the-prompt rule. */
   regionImageFor?: (region: MapRegion) => string | null;
   /** Whether to draw the tiny-country dot markers and the microstate insets (Vatican City, the
    * Caribbean cluster, ...) on top of the ordinary country shapes. Defaults to true — every
@@ -42,6 +32,13 @@ interface WorldMapProps {
    * on sight from the quiz's OWN markers and aren't relevant to a non-country quiz anyway, so
    * left on they'd just be confusing clutter mixed in with the real targets. */
   showCountryMarkers?: boolean;
+  /** When true, the ordinary country layer renders with the same non-interactive look/behavior
+   * background territories already get (no pointer cursor, no hover brighten) regardless of
+   * each country's own `quizzable` flag, and never receives taps even if `onCountryTap` is
+   * passed. For a `regions`-only screen (seas/oceans, US states): the country layer there is
+   * just backdrop context underneath the real quiz layer, not something to click, and it
+   * shouldn't visually invite a tap that would silently do nothing. */
+  countryLayerInert?: boolean;
   /** How to color each shape — the caller decides everything (default fill, target
    * highlighted, right/wrong feedback, mastery-map coloring, ...); this component only knows
    * how to draw and how to pan/zoom/tap. */
@@ -59,10 +56,17 @@ interface WorldMapProps {
   onCountryTap?: (feature: MapFeature) => void;
   /** When set (and changes to a new id), the map auto-pans/zooms to center that country —
    * "quickly see where the thing you're guessing actually is," for quiz modes where the
-   * country's identity isn't itself the secret (see QuizScreen's revealsLocationOnMap). Purely
-   * an initial view: the player can still freely pan/zoom away afterward, same as any other
-   * transform change. Ignored (no-op) for an id the map has no feature for. */
+   * country's identity isn't itself the secret (see QuizScreen's revealsLocationOnMap), or just
+   * to start a regional quiz (US states) already zoomed to the right part of the world instead
+   * of the whole globe. Purely an initial view: the player can still freely pan/zoom away
+   * afterward, same as any other transform change. Ignored (no-op) for an id the map has no
+   * feature for. */
   focusCountryId?: string | null;
+  /** Zoom level for `focusCountryId` — defaults to AUTO_FOCUS_SCALE (tuned for a single small
+   * country against its neighbors). A caller focusing on something physically larger (the USA
+   * for the US-states quiz) can pass a gentler scale so the initial view isn't cropped tighter
+   * than the thing it's supposed to be showing. */
+  focusScale?: number;
   className?: string;
 }
 
@@ -87,16 +91,15 @@ export function WorldMap({
   fillFor,
   flagFor,
   onCountryTap,
-  markers,
-  markerFillFor,
-  markerImageFor,
-  onMarkerTap,
+  countryLayerInert = false,
   regions,
   regionFillFor,
+  regionStrokeFor,
   onRegionTap,
   regionImageFor,
   showCountryMarkers = true,
   focusCountryId,
+  focusScale,
   className,
 }: WorldMapProps) {
   const svgRef = useRef<SVGSVGElement>(null);
@@ -122,12 +125,6 @@ export function WorldMap({
     return m;
   }, [features]);
 
-  const markerById = useMemo(() => {
-    const m = new Map<string, PointMarker>();
-    for (const marker of markers ?? []) m.set(marker.id, marker);
-    return m;
-  }, [markers]);
-
   const regionById = useMemo(() => {
     const m = new Map<string, MapRegion>();
     for (const region of regions ?? []) m.set(region.id, region);
@@ -136,19 +133,13 @@ export function WorldMap({
 
   function handleTap(target: Element | null) {
     if (!target) return;
-    const markerId = target.getAttribute('data-marker-id');
-    if (markerId !== null) {
-      const marker = markerById.get(markerId);
-      if (marker) onMarkerTap?.(marker);
-      return;
-    }
     const regionId = target.getAttribute('data-region-id');
     if (regionId !== null) {
       const region = regionById.get(regionId);
       if (region) onRegionTap?.(region);
       return;
     }
-    if (!onCountryTap || !features) return;
+    if (countryLayerInert || !onCountryTap || !features) return;
     const indexAttr = target.getAttribute('data-feature-index');
     if (indexAttr === null) return;
     const feature = features[Number(indexAttr)];
@@ -161,8 +152,8 @@ export function WorldMap({
     if (!focusCountryId) return;
     const feature = featureById.get(focusCountryId);
     if (!feature) return;
-    focusOn({ x: feature.centroid[0], y: feature.centroid[1] }, AUTO_FOCUS_SCALE);
-  }, [focusCountryId, featureById, focusOn]);
+    focusOn({ x: feature.centroid[0], y: feature.centroid[1] }, focusScale ?? AUTO_FOCUS_SCALE);
+  }, [focusCountryId, focusScale, featureById, focusOn]);
 
   if (!features) {
     return (
@@ -190,7 +181,9 @@ export function WorldMap({
               d={f.path}
               fill={fillFor(f)}
               vectorEffect="non-scaling-stroke"
-              className={f.quizzable ? 'world-map__country' : 'world-map__country world-map__country--bg'}
+              className={
+                f.quizzable && !countryLayerInert ? 'world-map__country' : 'world-map__country world-map__country--bg'
+              }
             />
           ))}
           {/* Flags for ordinary (non-tiny) countries — see flagFor's doc comment. Placed at the
@@ -246,22 +239,6 @@ export function WorldMap({
               </g>
             ) : null,
           )}
-          {/* Point markers for quiz universes with no boundary polygon at all (seas/oceans, US
-              states — see PointMarker's doc comment in geo.ts). Same constant-on-screen-size,
-              invisible-tap-radius-under-a-visible-dot approach as the tiny-country markers just
-              above, just driven by `markers` instead of `features`. */}
-          {markers?.map((marker) => (
-            <g key={marker.id} transform={`translate(${marker.x} ${marker.y}) scale(${1 / transform.scale})`}>
-              <circle data-marker-id={marker.id} r={marker.tapRadius} fill="transparent" pointerEvents="all" />
-              <circle data-marker-id={marker.id} r={5} fill={markerFillFor?.(marker) ?? '#888'} className="world-map__tiny-marker" />
-              {/* Offset above the dot, same reasoning as the tiny-country flag stamp below — the
-                  dot's own color is still the correct/wrong signal, the image sits alongside it
-                  instead of covering it. */}
-              {markerImageFor && markerImageFor(marker) && (
-                <image href={markerImageFor(marker)!} x={-8} y={-26} width={16} height={11} pointerEvents="none" />
-              )}
-            </g>
-          ))}
           {/* Real, bordered, directly-tappable region shapes (US states or seas/oceans — see
               MapRegion's doc comment in geo.ts). Drawn on top of the flat country layer (which
               still covers the rest of the world for context underneath) rather than replacing
@@ -272,6 +249,7 @@ export function WorldMap({
               data-region-id={region.id}
               d={region.path}
               fill={regionFillFor?.(region) ?? 'var(--map-land)'}
+              stroke={regionStrokeFor?.(region)}
               // Several water-body regions carry real holes (an ocean's polygon excludes every
               // separately-named sea/gulf within it, e.g. North Atlantic Ocean's real shape has
               // ~25 holes cut out for the Caribbean, the Gulf of Mexico, and others) — real-world

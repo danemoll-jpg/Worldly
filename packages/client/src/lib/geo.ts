@@ -395,31 +395,20 @@ function buildInset(group: (typeof INSET_GROUPS)[number], geojson: any): Inset {
   };
 }
 
-/** A single findable point on the main map — same idea as a tiny country's marker (see
- * MapFeature.centroid/tapRadius), just for quiz universes with no boundary polygon at all
- * (water bodies, US states — see waterBodies.ts/usStates.ts in @worldly/engine). `x`/`y` are
- * already projected to MAP_VIEWBOX units via the exact same projection every country shape uses,
- * so these render on WorldMap's existing SVG with no separate coordinate space to reconcile. */
-export interface PointMarker {
-  id: string;
-  name: string;
-  x: number;
-  y: number;
-  tapRadius: number;
-}
-
-/** A real, directly-tappable boundary shape for a quiz universe that (at first) only had marker
- * points — the "with borders" option for both the US-states quiz (`UsStatesQuizScreen`'s
- * `showBorders` toggle) and the seas/oceans quiz (`WaterBodyQuizScreen`'s equivalent), alongside
- * the marker-point approach `PointMarker` already covers for both. Both started marker-only
- * because no usable boundary data existed at the time (`countries-10m.json` only has the USA as
- * one whole-country shape; seas/oceans have no hard real-world edges at all, or so it seemed
- * until Natural Earth's marine-polygons layer turned out to be a genuine non-overlapping
- * tessellation by name — see water-body-regions.json.SOURCE.md) — real borders were always the
- * better option once sourced, not a deliberate final call against them. Same shape as
- * MapFeature's core fields (id/name/path/centroid), but deliberately not reusing MapFeature
- * itself: no isTiny/tapRadius/insetGroupId concept applies to either of these — every region is
- * comfortably taggable as its own real shape at the zoom levels its quiz actually uses. */
+/** A real, directly-tappable boundary shape for a quiz universe — the US-states quiz
+ * (`getUsStateRegions`/`UsStateRegion`) and the seas/oceans quiz (`getWaterBodyRegions`/
+ * `WaterBodyRegion`). Both quiz universes started as marker POINTS instead (a single findable
+ * dot, no real shape) because no usable boundary data existed at the time
+ * (`countries-10m.json` only has the USA as one whole-country shape; seas/oceans have no hard
+ * real-world edges at all, or so it seemed until Natural Earth's marine-polygons layer turned
+ * out to be a genuine non-overlapping tessellation by name — see
+ * water-body-regions.json.SOURCE.md) — real borders were always the better option once sourced,
+ * not a deliberate final call against them, and the marker-point rendering this file and
+ * WorldMap.tsx used to also support was removed once both had real shapes to use instead. Same
+ * shape as MapFeature's core fields (id/name/path/centroid), but deliberately not reusing
+ * MapFeature itself: no isTiny/tapRadius/insetGroupId concept applies to either of these — every
+ * region is comfortably taggable as its own real shape at the zoom levels its quiz actually
+ * uses. */
 export interface MapRegion {
   id: string;
   name: string;
@@ -437,44 +426,11 @@ export type WaterBodyRegion = MapRegion;
 interface MapData {
   features: MapFeature[];
   insets: Inset[];
-  waterBodyMarkers: PointMarker[];
-  usStateMarkers: PointMarker[];
   usStateRegions: UsStateRegion[];
   waterBodyRegions: WaterBodyRegion[];
 }
 
 let cachedPromise: Promise<MapData> | null = null;
-
-/** Same adaptive-tap-radius idea as the main map's tiny-country markers (see loadMapData's own
- * tapRadiusFor): cap each point's hit radius at half the distance to its nearest OTHER point in
- * the same marker set, so two nearby markers' tap areas never overlap and steal each other's
- * taps — the exact problem that matters most here, since (unlike most tiny countries) these
- * marker sets have real, deliberately-close clusters (the Baltic/North/Black Seas all crowd
- * together; New England's state capitals are barely apart on a world-scale projection). */
-function projectPointMarkers<T extends { id: string; name: string; lon: number; lat: number }>(
-  items: T[],
-  projection: ReturnType<typeof geoNaturalEarth1>,
-  minRadius: number,
-  maxRadius: number,
-  margin: number,
-): PointMarker[] {
-  const projected = items
-    .map((item) => {
-      const p = projection([item.lon, item.lat]);
-      return p ? { id: item.id, name: item.name, x: p[0], y: p[1] } : null;
-    })
-    .filter((p): p is { id: string; name: string; x: number; y: number } => p !== null);
-
-  return projected.map((p) => {
-    let nearestDistance = Infinity;
-    for (const other of projected) {
-      if (other.id === p.id) continue;
-      nearestDistance = Math.min(nearestDistance, Math.hypot(other.x - p.x, other.y - p.y));
-    }
-    const halfGap = nearestDistance / 2 - margin;
-    return { ...p, tapRadius: Math.min(maxRadius, Math.max(minRadius, halfGap)) };
-  });
-}
 
 async function loadMapData(): Promise<MapData> {
   const response = await fetch(`${import.meta.env.BASE_URL}data/countries-10m.json`);
@@ -566,15 +522,10 @@ async function loadMapData(): Promise<MapData> {
 
   const insets = INSET_GROUPS.map((group) => buildInset(group, geojson));
 
-  // Same MIN/MAX_TAP_RADIUS bounds as the tiny-country markers — these render at the same scale
-  // (constant on-screen size, counter-scaled against zoom — see WorldMap.tsx), so the same
-  // touch-target sizing applies unchanged.
-  const waterBodyMarkers = projectPointMarkers(WATER_BODIES, projection, MIN_TAP_RADIUS, MAX_TAP_RADIUS, TAP_RADIUS_MARGIN);
-  const usStateMarkers = projectPointMarkers(US_STATES, projection, MIN_TAP_RADIUS, MAX_TAP_RADIUS, TAP_RADIUS_MARGIN);
   const usStateRegions = await loadUsStateRegions(pathGenerator);
   const waterBodyRegions = await loadWaterBodyRegions(projection, pathGenerator);
 
-  return { features, insets, waterBodyMarkers, usStateMarkers, usStateRegions, waterBodyRegions };
+  return { features, insets, usStateRegions, waterBodyRegions };
 }
 
 const US_STATE_ID_BY_NAME = new Map<string, string>(US_STATES.map((s: UsStateDef) => [s.name, s.id]));
@@ -740,19 +691,6 @@ export function getMapFeatures(): Promise<MapFeature[]> {
  * getMapFeatures, just a different slice of the result. */
 export function getInsets(): Promise<Inset[]> {
   return loadMapDataCached().then((d) => d.insets);
-}
-
-/** Findable marker points for the seas/oceans quiz — see WATER_BODIES (@worldly/engine) and
- * PointMarker's doc comment for why these are points, not real boundary polygons. */
-export function getWaterBodyMarkers(): Promise<PointMarker[]> {
-  return loadMapDataCached().then((d) => d.waterBodyMarkers);
-}
-
-/** Findable marker points (one per state capital) for the US states quiz — the "without
- * borders" option (see UsStatesQuizScreen's `showBorders` toggle and PointMarker's doc
- * comment). */
-export function getUsStateMarkers(): Promise<PointMarker[]> {
-  return loadMapDataCached().then((d) => d.usStateMarkers);
 }
 
 /** Real US state boundary shapes for the US states quiz — the "with borders" option (see

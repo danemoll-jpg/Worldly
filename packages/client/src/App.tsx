@@ -3,6 +3,7 @@ import { DailyChallengeScreen } from './components/DailyChallengeScreen';
 import { HomeScreen } from './components/HomeScreen';
 import { LookupScreen } from './components/LookupScreen';
 import { MasteryScreen } from './components/MasteryScreen';
+import { QuizPickerScreen } from './components/QuizPickerScreen';
 import { QuizScreen } from './components/QuizScreen';
 import { RecordsScreen } from './components/RecordsScreen';
 import { ReviewMapScreen } from './components/ReviewMapScreen';
@@ -13,7 +14,7 @@ import { UsStatesQuizScreen } from './components/UsStatesQuizScreen';
 import { WaterBodyQuizScreen } from './components/WaterBodyQuizScreen';
 import { useQuiz } from './hooks/useQuiz';
 
-type Screen = 'home' | 'setup' | 'lookup' | 'mastery' | 'sync' | 'records' | 'daily' | 'waterBodies' | 'usStates';
+type Screen = 'home' | 'quizPicker' | 'setup' | 'lookup' | 'mastery' | 'sync' | 'records' | 'daily' | 'waterBodies' | 'usStates';
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('home');
@@ -77,8 +78,19 @@ export default function App() {
     );
   }
 
+  if (screen === 'quizPicker') {
+    return (
+      <QuizPickerScreen
+        onCountries={() => setScreen('setup')}
+        onUsStates={() => setScreen('usStates')}
+        onWaterBodies={() => setScreen('waterBodies')}
+        onBack={() => setScreen('home')}
+      />
+    );
+  }
+
   if (screen === 'setup') {
-    return <SetupScreen stats={quiz.stats} onBack={() => setScreen('home')} onStart={quiz.start} />;
+    return <SetupScreen stats={quiz.stats} onBack={() => setScreen('quizPicker')} onStart={quiz.start} />;
   }
 
   if (screen === 'lookup') {
@@ -118,6 +130,7 @@ export default function App() {
         stats={quiz.waterBodyStats}
         onViewRecords={() => setScreen('records')}
         onBack={() => setScreen('home')}
+        onBackToPicker={() => setScreen('quizPicker')}
       />
     );
   }
@@ -129,6 +142,7 @@ export default function App() {
         stats={quiz.usStateStats}
         onViewRecords={() => setScreen('records')}
         onBack={() => setScreen('home')}
+        onBackToPicker={() => setScreen('quizPicker')}
       />
     );
   }
@@ -151,14 +165,12 @@ export default function App() {
   return (
     <HomeScreen
       dailyChallenge={quiz.dailyChallenge}
-      onStartQuiz={() => setScreen('setup')}
+      onStartQuiz={() => setScreen('quizPicker')}
       onBrowse={() => setScreen('lookup')}
       onMasteryMap={() => setScreen('mastery')}
       onRecords={() => setScreen('records')}
       onDaily={() => setScreen('daily')}
       onSync={() => setScreen('sync')}
-      onWaterBodies={() => setScreen('waterBodies')}
-      onUsStates={() => setScreen('usStates')}
       syncStatus={quiz.syncStatus}
       syncCode={quiz.syncCode}
     />
