@@ -25,8 +25,11 @@ export interface CountryDef {
   /** Official/widely-spoken language names, unranked beyond the source data's own order — shown
    * in the atlas panel. Not currently used for quizzing. Never empty. */
   languages: string[];
-  /** A single Unicode flag emoji (a regional-indicator pair) — used as-is by the flags quiz
-   * category and the atlas panel, no image asset involved. */
+  /** A single Unicode flag emoji (a regional-indicator pair). Kept on the data as a cheap inline
+   * glyph, but no longer what the flags quiz category or the atlas panel actually render — several
+   * platforms (Windows/Chrome included) don't render regional-indicator pairs as flags at all, so
+   * the client renders a real bundled SVG instead (see client/src/lib/format.ts's
+   * countryFlagSrc and public/data/flags/countries/SOURCE.md). */
   flagEmoji: string;
 }
 
