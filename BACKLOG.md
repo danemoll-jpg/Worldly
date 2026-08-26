@@ -12,19 +12,33 @@ just forgotten.
 
 ## Open
 
-- **Daily Challenge streak doesn't sync across devices — unlike the rest of the app.** Confirmed
-  in code (8/25/2026): `useDailyChallenge.ts` reads/writes only `localStorage` directly
-  (`worldlyDailyChallenge` key) — it never touches the sync pipeline (`network/sync.ts`) that
-  personal bests and weak-spots history go through. So if you play the daily challenge on one
-  device, that streak lives only there; open the app on another device (even one connected to the
-  same sync code) and it's tracking a completely separate streak. Surfaced by the user right after
-  the "clear my stats & history" reset feature shipped — a natural expectation once cross-device
-  sync exists at all is that "one shared question a day" also means one shared streak. Fix would
-  mean folding the daily-challenge state (`lastPlayedDateKey`/`lastPlayedCorrect`/`streak`) into
-  the same synced document `history`/`stats` already use, same idea as the reset feature's
-  `resetSyncDoc` — not started, not scoped beyond this.
+_(nothing open right now — see Done below for what's shipped)_
 
 ## Done
+
+- **Daily Challenge streak now syncs across devices — fixed.** `useDailyChallenge.ts` used to
+  read/write only `localStorage` directly, never touching the sync pipeline personal bests and
+  weak-spots history already go through — playing the daily challenge on one device tracked a
+  completely separate streak from every other device on the same sync code. Folded
+  `lastPlayedDateKey`/`lastPlayedCorrect`/`streak` into the same `SyncDoc` `stats`/`history`
+  already live in (`network/sync.ts`'s new optional `dailyChallenge` field — optional so a doc
+  written before this shipped still deserializes fine, with every reader treating "field absent"
+  as "no info yet," never as "field present and empty"), reusing `createSyncCode`/
+  `connectToSyncCode`'s existing seed/merge flow. Merging two independently-grown streaks (the
+  one-time fold-in when a device connects) isn't a "combine the numbers" case like stats/history
+  — whichever device most recently actually played is simply authoritative
+  (`mergeDailyChallengeState`, verified against 5 cases before trusting it live). `resetSyncDoc`
+  (the "clear my stats & history" feature) switched from a full-document replace to
+  `{ merge: true }` so it can't silently wipe the streak as a side effect of its payload simply
+  not mentioning it — the reset button was always scoped to stats/history, never the streak.
+  Centralized in `useQuiz.ts` (`completeDailyChallenge`) instead of the old separate hook, since
+  `useQuiz` already owns the one live Firestore subscription everything else goes through;
+  `useDailyChallenge.ts` is removed, `DailyChallengeScreen`/`HomeScreen` now take the state as
+  props from `App.tsx`. Verified live against the real Firestore project (not just reasoning
+  about the diff): a Playwright script drove two separate browser contexts end to end — device A
+  plays today's challenge and starts syncing, device B (which never plays anything itself) shows
+  the correct "done today, 1-day streak" the moment it connects, and after device A runs "Clear
+  my stats & history," both devices still show the streak intact. Commit `4b12e84`.
 
 - **Seas and oceans quiz — shipped.** Find/name bodies of water (5 oceans + 15 major seas), the
   water equivalent of the country quiz. The open question flagged here — seas nest inside oceans
