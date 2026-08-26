@@ -16,6 +16,35 @@ _(nothing open right now — see Done below for what's shipped)_
 
 ## Done
 
+- **US-states auto-zoom, seas/oceans land/water contrast, quiz-picker tabs, and dropping the
+  dot/marker fallback — shipped.** A 6-item request in one batch: (1) the US-states quiz now
+  opens already zoomed to the US (`focusCountryId`/`focusScale` on WorldMap); (2) the seas/oceans
+  map recolors land solid gray and non-interactive so water reads as clearly distinct blue at a
+  glance; (3) "Start a quiz" on the home screen now opens a 3-tab picker (Countries/US
+  states/Seas & oceans) instead of separate cards you had to scroll to find; (4) the old
+  "Dots only / With borders" marker system was removed entirely — every consumer (both quizzes,
+  the mastery map) now taps real region polygons unconditionally, with tap accuracy identical
+  either way; (5) in its place, a "Show outlines / Hide until answered" toggle controls only
+  whether the border stroke is visible before answering — an answered region's real border (and
+  flag stamp) always reveals itself regardless. Bug found and fixed along the way:
+  `.world-map__region`'s CSS class had a hardcoded stroke color that silently outranked whatever
+  `regionStrokeFor` returned (a CSS stylesheet rule always beats an SVG presentation attribute) —
+  every region rendered with a visible border, including in "hidden" mode, no matter what the
+  toggle said. Fixed by dropping the CSS color and requiring every WorldMap caller to pass its own
+  `regionStrokeFor` explicitly. Verified via live Playwright screenshots (fully seamless hidden
+  map, correct reveal-on-answer, all three consumers). Commit `1763f46`.
+
+- **All 197 country flags converted from emoji to real SVG images — shipped.** Same fix already
+  applied to US states, now for countries: Unicode regional-indicator flag emoji don't render on
+  every platform — Windows/Chrome shows the two-letter country code as text instead, which turned
+  out to affect the United States' own flag, not just small/obscure ones. Sourced all 197 real
+  flag SVGs from the `flag-icons` npm package (MIT), joined to this app's ISO-numeric country ids
+  via `world-countries`' ccn3 field (both temporary, `--no-save` dev-time sources, already
+  uninstalled — see `public/data/flags/countries/SOURCE.md` to regenerate). Every render site that
+  used `CountryDef.flagEmoji` now renders a real image instead: the flags-category quiz prompt,
+  the map's per-country flag stamp after answering, the lookup/atlas screen, the daily challenge,
+  and the post-quiz review map. Commit `756aa4a`.
+
 - **Seas/oceans + US-states quizzes: sync, personal-bests, and mastery-map integration —
   shipped.** Both quizzes launched local-only for miss-tracking (see their own entries below);
   the user asked to close that gap before the next deploy rather than ship it partial, wanting
