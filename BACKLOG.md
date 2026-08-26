@@ -102,7 +102,19 @@ _(nothing open right now — see Done below for what's shipped)_
   equivalent at first, since `WorldMap`'s existing flag-stamping is Unicode-emoji-only and states
   use real image files. Added a parallel `markerImageFor` (an SVG `<image>` instead of `<text>`)
   and wired it in with the same rules (skip for the 'flag' category itself, since that's already
-  the prompt). Commit `cb3c3e3`.
+  the prompt). Commit `cb3c3e3`. Then the user asked for real state borders (or an "on/off"
+  option) plus a skip button on this quiz and seas/oceans — the marker-dot approach above was
+  deliberate at the time (no boundary geometry existed in the bundled data at all), not a final
+  call against real borders, so once asked, sourced `us-atlas`'s `states-10m.json` (raw, not
+  Albers-projected, so it works with this app's own projection) as real US-state boundary data —
+  see `public/data/us-states-10m.json.SOURCE.md`. `UsStatesQuizScreen` now has a "Map style"
+  toggle (With borders / Dots only, defaults to borders, remembered in `localStorage`) between
+  real bordered/tappable state shapes (`WorldMap`'s new `regions` layer) and the original marker
+  dots. Skip (`genericSession.ts` already had it plumbed through, just never had a button) added
+  to both this quiz and seas/oceans. Verified live: 50 real state shapes render and score
+  correctly on a direct tap (no marker/precomputed-coordinate involved at all), toggling swaps
+  cleanly between the two rendering modes, the choice survives a reload, and skip actually
+  advances the question in both quizzes. Commit `42a6113`.
 
 - **Crimea now depicted as part of Ukraine, not Russia — fixed.** Went with the surgical-cut
   approach over sourcing replacement boundary data (the topojson's `countries` object turned out
