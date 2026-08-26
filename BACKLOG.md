@@ -79,7 +79,16 @@ _(nothing open right now — see Done below for what's shipped)_
   build/typecheck couldn't: `WorldMap`'s tiny-country dots (Vatican City, Nauru, ...) and
   microstate insets were rendering unconditionally underneath the new water-body markers, visually
   indistinguishable from the real targets — fixed with a new `showCountryMarkers` flag. Commit
-  `8f6ad4e`.
+  `8f6ad4e`. The "no real boundary source exists" half of the original nesting reasoning turned
+  out to be wrong: the user asked for click-anywhere borders here too (after the same ask for US
+  states), and Natural Earth's marine-polygons layer has all 20 bodies as named polygons that are
+  a genuine non-overlapping tessellation — verified directly (point-in-polygon script) before
+  trusting it, so the nesting concern doesn't actually block real borders after all. Same "Map
+  style" toggle (With borders / Dots only, defaults to borders) as the US-states quiz now, built
+  on the same shared `MapRegion` plumbing. Caught and fixed a real d3-geo rendering artifact along
+  the way (a solid blob in open mid-Atlantic water, traced to ~25 tiny holes in North Atlantic
+  Ocean's real shape that d3-geo's adaptive resampling mis-projected to span nearly the whole
+  map) — see the commit for the full diagnosis. Commit `9316a03`.
 
 - **US states / state capitals / state flags quiz — shipped.** All 50 states (not DC or
   territories — the backlog's own "50 states" framing), quizzable on name, capital, or flag, by
