@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { getInsets, getMapFeatures, Inset, MAP_VIEWBOX, MapFeature, PointMarker } from '../lib/geo';
+import { getInsets, getMapFeatures, Inset, MAP_VIEWBOX, MapFeature, PointMarker, UsStateRegion } from '../lib/geo';
 import { usePanZoom } from '../lib/panZoom';
 
 interface WorldMapProps {
-  /** Findable point markers with no underlying country shape — the seas/oceans and US-states
-   * quizzes (see PointMarker's doc comment for why they're points, not polygons). Renders on top
-   * of the ordinary country layer using the exact same constant-on-screen-size, adaptive-tap-
-   * radius approach as the tiny-country markers below (counter-scaled against zoom). Omit
-   * entirely for the country quiz, which has no use for this layer. */
+  /** Findable point markers with no underlying country shape — the seas/oceans quiz always,
+   * the US-states quiz when its `showBorders` toggle is off (see PointMarker's doc comment for
+   * why the marker approach exists at all). Renders on top of the ordinary country layer using
+   * the exact same constant-on-screen-size, adaptive-tap-radius approach as the tiny-country
+   * markers below (counter-scaled against zoom). Omit entirely for the country quiz, which has
+   * no use for this layer. */
   markers?: PointMarker[];
   /** How to color/label a marker's visible dot — parallel to `fillFor`, just for `markers`
    * instead of country shapes. Required whenever `markers` is passed. */
@@ -20,6 +21,22 @@ interface WorldMapProps {
    * "learn the flags out of ordinary play" effect, same skip-when-flag-IS-the-prompt rule.
    * Ignored for `features` — this is markers-only. */
   markerImageFor?: (marker: PointMarker) => string | null;
+  /** Real, bordered, directly-tappable US-state shapes — the US-states quiz's `showBorders`
+   * toggle, ON (see UsStateRegion's doc comment for why this exists as a second option
+   * alongside `markers` rather than replacing it: the marker approach was a deliberate,
+   * necessary fallback for the seas/oceans quiz, which has no real boundary data at all — real
+   * borders were always the better option for US states specifically once sourced). Mutually
+   * exclusive with `markers` in practice (a caller picks one or the other for a given render),
+   * but nothing here enforces that — they're independent layers. */
+  regions?: UsStateRegion[];
+  /** How to color a region's fill — parallel to `fillFor`/`markerFillFor`. Required whenever
+   * `regions` is passed. */
+  regionFillFor?: (region: UsStateRegion) => string;
+  /** Fires for a tap on one of `regions` — parallel to `onCountryTap`/`onMarkerTap`. */
+  onRegionTap?: (region: UsStateRegion) => void;
+  /** Optional image URL to stamp at a region's centroid — parallel to `markerImageFor`, for
+   * `regions` instead of `markers`. */
+  regionImageFor?: (region: UsStateRegion) => string | null;
   /** Whether to draw the tiny-country dot markers and the microstate insets (Vatican City, the
    * Caribbean cluster, ...) on top of the ordinary country shapes. Defaults to true — every
    * existing caller (the country quiz, the mastery map, lookup) wants these. Set to false for a
@@ -76,6 +93,10 @@ export function WorldMap({
   markerFillFor,
   markerImageFor,
   onMarkerTap,
+  regions,
+  regionFillFor,
+  onRegionTap,
+  regionImageFor,
   showCountryMarkers = true,
   focusCountryId,
   className,
@@ -109,12 +130,24 @@ export function WorldMap({
     return m;
   }, [markers]);
 
+  const regionById = useMemo(() => {
+    const m = new Map<string, UsStateRegion>();
+    for (const region of regions ?? []) m.set(region.id, region);
+    return m;
+  }, [regions]);
+
   function handleTap(target: Element | null) {
     if (!target) return;
     const markerId = target.getAttribute('data-marker-id');
     if (markerId !== null) {
       const marker = markerById.get(markerId);
       if (marker) onMarkerTap?.(marker);
+      return;
+    }
+    const regionId = target.getAttribute('data-region-id');
+    if (regionId !== null) {
+      const region = regionById.get(regionId);
+      if (region) onRegionTap?.(region);
       return;
     }
     if (!onCountryTap || !features) return;
@@ -231,6 +264,28 @@ export function WorldMap({
               )}
             </g>
           ))}
+          {/* Real, bordered, directly-tappable US-state shapes — see UsStateRegion's doc
+              comment in geo.ts. Drawn on top of the flat country layer (which still covers the
+              rest of the world for context underneath) rather than replacing it. */}
+          {regions?.map((region) => (
+            <path
+              key={region.id}
+              data-region-id={region.id}
+              d={region.path}
+              fill={regionFillFor?.(region) ?? 'var(--map-land)'}
+              vectorEffect="non-scaling-stroke"
+              className="world-map__region"
+            />
+          ))}
+          {regions?.map((region) => {
+            const image = regionImageFor?.(region);
+            if (!image) return null;
+            return (
+              <g key={`region-img-${region.id}`} transform={`translate(${region.centroid[0]} ${region.centroid[1]}) scale(${1 / transform.scale})`}>
+                <image href={image} x={-8} y={-6} width={16} height={11} pointerEvents="none" />
+              </g>
+            );
+          })}
         </g>
       </svg>
 

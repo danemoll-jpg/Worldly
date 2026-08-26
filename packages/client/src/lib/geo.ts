@@ -11,7 +11,7 @@
 // loads in parallel with the app shell and the browser can cache it independently.
 import { geoNaturalEarth1, geoPath } from 'd3-geo';
 import { feature } from 'topojson-client';
-import { COUNTRY_BY_ID, US_STATES, WATER_BODIES } from '@worldly/engine';
+import { COUNTRY_BY_ID, US_STATES, UsStateDef, WATER_BODIES } from '@worldly/engine';
 
 export interface MapFeature {
   /** Matches a CountryDef.id (see @worldly/engine) when `quizzable`; otherwise a raw id or a
@@ -408,11 +408,29 @@ export interface PointMarker {
   tapRadius: number;
 }
 
+/** A real US state boundary shape — the "with borders" option for the US-states quiz (see
+ * UsStatesQuizScreen's `showBorders` toggle), alongside the marker-point approach `PointMarker`
+ * already covers. Exists because `us-atlas`'s `states-10m.json` (see
+ * public/data/us-states-10m.json.SOURCE.md) has real per-state geometry, unlike
+ * `countries-10m.json`, which only has the USA as one whole-country shape — that's WHY the
+ * marker approach was built first (see PointMarker's own doc comment) rather than because real
+ * borders weren't wanted. Same shape as MapFeature's core fields (id/name/path/centroid), but
+ * deliberately not reusing MapFeature itself: no isTiny/tapRadius/insetGroupId concept applies
+ * here (every state is comfortably taggable as its own real shape at US-map zoom levels — this
+ * isn't Vatican-City-sized). */
+export interface UsStateRegion {
+  id: string;
+  name: string;
+  path: string;
+  centroid: [number, number];
+}
+
 interface MapData {
   features: MapFeature[];
   insets: Inset[];
   waterBodyMarkers: PointMarker[];
   usStateMarkers: PointMarker[];
+  usStateRegions: UsStateRegion[];
 }
 
 let cachedPromise: Promise<MapData> | null = null;
@@ -543,8 +561,43 @@ async function loadMapData(): Promise<MapData> {
   // touch-target sizing applies unchanged.
   const waterBodyMarkers = projectPointMarkers(WATER_BODIES, projection, MIN_TAP_RADIUS, MAX_TAP_RADIUS, TAP_RADIUS_MARGIN);
   const usStateMarkers = projectPointMarkers(US_STATES, projection, MIN_TAP_RADIUS, MAX_TAP_RADIUS, TAP_RADIUS_MARGIN);
+  const usStateRegions = await loadUsStateRegions(pathGenerator);
 
-  return { features, insets, waterBodyMarkers, usStateMarkers };
+  return { features, insets, waterBodyMarkers, usStateMarkers, usStateRegions };
+}
+
+const US_STATE_ID_BY_NAME = new Map<string, string>(US_STATES.map((s: UsStateDef) => [s.name, s.id]));
+
+/** Real US state boundary shapes — see UsStateRegion's doc comment for why this exists
+ * alongside the marker-point approach. Reuses the country map's own `pathGenerator` (built from
+ * the SAME projection every other shape on the map uses), so these line up with everything else
+ * with no separate coordinate space to reconcile — just a second topojson source layered onto
+ * the same drawing surface. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function loadUsStateRegions(pathGenerator: ReturnType<typeof geoPath>): Promise<UsStateRegion[]> {
+  const response = await fetch(`${import.meta.env.BASE_URL}data/us-states-10m.json`);
+  if (!response.ok) throw new Error(`Failed to load US state boundary data (${response.status})`);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const topology = (await response.json()) as any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const geojson = feature(topology, topology.objects.states) as any;
+
+  const regions: UsStateRegion[] = [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const f of geojson.features as any[]) {
+    // The source topojson has 56 geometries (50 states + DC + 5 territories — Puerto Rico,
+    // Guam, American Samoa, the Northern Marianas, the US Virgin Islands); joined by name
+    // against usStates.ts rather than the topojson's own FIPS numeric ids, since usStates.ts's
+    // `id` (a USPS postal code) is already load-bearing elsewhere (StatsMap keys, synced
+    // history) — see us-states-10m.json.SOURCE.md.
+    const id = US_STATE_ID_BY_NAME.get(f.properties?.name as string);
+    if (!id) continue; // DC / a territory — not one of the 50 quizzed states
+    const { path, primaryBounds } = projectFeature(f, pathGenerator);
+    if (!path || !primaryBounds) continue;
+    const centroid: [number, number] = [(primaryBounds[0] + primaryBounds[2]) / 2, (primaryBounds[1] + primaryBounds[3]) / 2];
+    regions.push({ id, name: f.properties.name as string, path, centroid });
+  }
+  return regions;
 }
 
 function loadMapDataCached(): Promise<MapData> {
@@ -570,8 +623,15 @@ export function getWaterBodyMarkers(): Promise<PointMarker[]> {
   return loadMapDataCached().then((d) => d.waterBodyMarkers);
 }
 
-/** Findable marker points (one per state capital) for the US states quiz — same reasoning as
- * getWaterBodyMarkers: no per-state boundary polygon exists in the bundled map data. */
+/** Findable marker points (one per state capital) for the US states quiz — the "without
+ * borders" option (see UsStatesQuizScreen's `showBorders` toggle and PointMarker's doc
+ * comment). */
 export function getUsStateMarkers(): Promise<PointMarker[]> {
   return loadMapDataCached().then((d) => d.usStateMarkers);
+}
+
+/** Real US state boundary shapes for the US states quiz — the "with borders" option (see
+ * UsStateRegion's doc comment). */
+export function getUsStateRegions(): Promise<UsStateRegion[]> {
+  return loadMapDataCached().then((d) => d.usStateRegions);
 }

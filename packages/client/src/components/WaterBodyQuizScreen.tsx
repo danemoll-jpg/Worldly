@@ -135,6 +135,10 @@ export function WaterBodyQuizScreen({ quiz, stats, onViewRecords, onBack }: Wate
   const totalInSession = session.pool.length;
   const questionNumber = session.askedIds.length + (current ? 1 : 0);
   const mode = session.mode;
+  // Same rule as the country quiz's skip button: no-op (and hidden as disabled rather than
+  // hidden entirely, so the layout doesn't jump) once feedback's showing or only one question
+  // is left — skipping the last question would have nothing to swap it with.
+  const canSkip = !!current && !feedback && session.remaining.length > 1;
 
   function markerFillFor(marker: PointMarker): string {
     if (feedback && marker.id === feedback.countryId) {
@@ -248,7 +252,18 @@ export function WaterBodyQuizScreen({ quiz, stats, onViewRecords, onBack }: Wate
             {feedback.correct ? '✅ Correct!' : `❌ That was ${WATER_BODY_BY_ID[feedback.countryId]?.name}`}
           </span>
         ) : current ? (
-          <span>{mode === 'findIt' ? <>Find: <strong>{current.name}</strong></> : 'What body of water is highlighted?'}</span>
+          <>
+            <span>{mode === 'findIt' ? <>Find: <strong>{current.name}</strong></> : 'What body of water is highlighted?'}</span>
+            <button
+              type="button"
+              className="quiz-skip"
+              onClick={quiz.skip}
+              disabled={!canSkip}
+              title="Come back to this one later in the session"
+            >
+              Skip for now ⤼
+            </button>
+          </>
         ) : null}
       </div>
 

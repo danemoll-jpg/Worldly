@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { GenericAnswer, masteryLevel, QuizAnswerResult, StatsMap, US_STATE_BY_ID, US_STATES, UsStateDef } from '@worldly/engine';
-import { getUsStateMarkers, PointMarker } from '../lib/geo';
+import { getUsStateMarkers, getUsStateRegions, PointMarker, UsStateRegion } from '../lib/geo';
 import { GenericQuizController } from '../hooks/useGenericQuiz';
 import { isBetterSession } from '../lib/storage';
 import { WorldMap } from './WorldMap';
@@ -15,6 +15,24 @@ interface UsStatesQuizScreenProps {
 type Category = 'name' | 'flag' | 'capital';
 
 const FEEDBACK_DISPLAY_MS = 1200;
+const SHOW_BORDERS_KEY = 'worldlyUsStatesShowBorders';
+
+function loadShowBorders(): boolean {
+  try {
+    const raw = localStorage.getItem(SHOW_BORDERS_KEY);
+    return raw === null ? true : raw === 'true'; // borders on by default
+  } catch {
+    return true;
+  }
+}
+
+function saveShowBorders(value: boolean): void {
+  try {
+    localStorage.setItem(SHOW_BORDERS_KEY, String(value));
+  } catch {
+    // ignore — just a display preference, no worse than not remembering it
+  }
+}
 
 function flagSrc(state: UsStateDef): string {
   return `${import.meta.env.BASE_URL}data/flags/us-states/${state.id.toLowerCase()}.svg`;
@@ -28,11 +46,11 @@ function promptFor(category: Category, state: UsStateDef): { kind: 'text' | 'fla
 
 /** "Find the state on the map, type its name, or recognize its flag/capital" — the US-states
  * equivalent of the country quiz, on the same shared genericSession/useGenericQuiz machinery as
- * WaterBodyQuizScreen. See usStates.ts's doc comment for why states are marker points at their
- * capital's coordinates rather than real boundary shapes: `countries-10m.json` only has the USA
- * as one whole-country shape, no internal state borders — the same "no boundary geometry
- * available" situation as seas/oceans, so this reuses the exact same marker approach and the
- * exact same WorldMap `markers` layer (built for that quiz) rather than a second one.
+ * WaterBodyQuizScreen. Two ways to find a state on the map (`showBorders`, a player-chosen
+ * toggle, persisted): real bordered/tappable state shapes (`getUsStateRegions` — see
+ * UsStateRegion's doc comment in geo.ts, sourced from `us-atlas`), or the original marker-dot
+ * approach (`getUsStateMarkers`, one dot per capital) also used by the seas/oceans quiz, which
+ * has no real boundary data available at all and so has no borders option.
  *
  * `quiz`/`stats` come from useQuiz.ts, which owns persistence/sync for this universe — this
  * component is purely presentational over that controller, same relationship QuizScreen has to
@@ -41,6 +59,8 @@ export function UsStatesQuizScreen({ quiz, stats, onViewRecords, onBack }: UsSta
   const [feedback, setFeedback] = useState<QuizAnswerResult | null>(null);
   const [typedAnswer, setTypedAnswer] = useState('');
   const [markers, setMarkers] = useState<PointMarker[]>([]);
+  const [regions, setRegions] = useState<UsStateRegion[]>([]);
+  const [showBorders, setShowBorders] = useState<boolean>(loadShowBorders);
   const [pendingMode, setPendingMode] = useState<'findIt' | 'typeIt'>('findIt');
   const [pendingScope, setPendingScope] = useState<'all' | 'weakSpots'>('all');
   const [category, setCategory] = useState<Category>('name');
@@ -53,10 +73,18 @@ export function UsStatesQuizScreen({ quiz, stats, onViewRecords, onBack }: UsSta
     getUsStateMarkers().then((loaded) => {
       if (!cancelled) setMarkers(loaded);
     });
+    getUsStateRegions().then((loaded) => {
+      if (!cancelled) setRegions(loaded);
+    });
     return () => {
       cancelled = true;
     };
   }, []);
+
+  function toggleShowBorders(value: boolean) {
+    setShowBorders(value);
+    saveShowBorders(value);
+  }
 
   const resultById = useMemo(() => {
     const m = new Map<string, boolean>();
@@ -103,9 +131,21 @@ export function UsStatesQuizScreen({ quiz, stats, onViewRecords, onBack }: UsSta
           </button>
           <h1>🇺🇸 US states</h1>
           <p className="start-screen__subtitle">
-            All 50 states, marked at their capital city — the map data only has the USA as one whole-country shape, so
-            there's no real state border to click, just a findable point.
+            All 50 states, with real state borders on the map — or switch to simple marker dots below if you'd
+            rather.
           </p>
+
+          <label className="start-screen__label">
+            Map style
+            <div className="start-screen__options">
+              <button type="button" className={showBorders ? 'active' : ''} onClick={() => toggleShowBorders(true)}>
+                With borders
+              </button>
+              <button type="button" className={!showBorders ? 'active' : ''} onClick={() => toggleShowBorders(false)}>
+                Dots only
+              </button>
+            </div>
+          </label>
 
           <label className="start-screen__label">
             How do you want to be quizzed?
@@ -169,37 +209,61 @@ export function UsStatesQuizScreen({ quiz, stats, onViewRecords, onBack }: UsSta
   const questionNumber = session.askedIds.length + (current ? 1 : 0);
   const mode = session.mode;
   const prompt = current ? promptFor(activeCategory, current) : null;
+  // Same rule as the country quiz's skip button: no-op once feedback's showing or only one
+  // question is left — skipping the last question would have nothing to swap it with.
+  const canSkip = !!current && !feedback && session.remaining.length > 1;
 
-  function markerFillFor(marker: PointMarker): string {
-    if (feedback && marker.id === feedback.countryId) {
+  // Shared by both the marker-dot and real-border rendering — same state, same rules,
+  // regardless of which the player's picked (see `showBorders`), just keyed by id instead of by
+  // a specific PointMarker/UsStateRegion shape.
+  function fillForId(id: string): string {
+    if (feedback && id === feedback.countryId) {
       return feedback.correct ? 'var(--map-correct)' : 'var(--map-wrong)';
     }
-    if (mode === 'typeIt' && current && marker.id === current.id) {
+    if (mode === 'typeIt' && current && id === current.id) {
       return 'var(--map-target)';
     }
-    const prior = resultById.get(marker.id);
+    const prior = resultById.get(id);
     if (prior === true) return 'var(--map-answered)';
     if (prior === false) return 'var(--map-missed)';
     return 'var(--map-land)';
   }
-
-  // Once a state's been answered (this question's own feedback flash, or any earlier one this
-  // session), stamp its flag at its marker for the rest of the session — the state-quiz
-  // equivalent of QuizScreen's flagFor, building "learn the flags" out of ordinary play instead
-  // of a dedicated mode. Skipped for the 'flag' category specifically, same reason as there: the
-  // flag was already the prompt for that question, so showing it again wouldn't teach anything.
-  function markerImageFor(marker: PointMarker): string | null {
-    if (activeCategory === 'flag') return null;
-    const alreadyAnswered = (feedback && marker.id === feedback.countryId) || resultById.has(marker.id);
-    if (!alreadyAnswered) return null;
-    const state = US_STATE_BY_ID[marker.id];
-    return state ? flagSrc(state) : null;
+  function markerFillFor(marker: PointMarker): string {
+    return fillForId(marker.id);
+  }
+  function regionFillFor(region: UsStateRegion): string {
+    return fillForId(region.id);
   }
 
-  function handleMarkerTap(marker: PointMarker) {
+  // Once a state's been answered (this question's own feedback flash, or any earlier one this
+  // session), stamp its flag for the rest of the session — the state-quiz equivalent of
+  // QuizScreen's flagFor, building "learn the flags" out of ordinary play instead of a dedicated
+  // mode. Skipped for the 'flag' category specifically, same reason as there: the flag was
+  // already the prompt for that question, so showing it again wouldn't teach anything.
+  function imageForId(id: string): string | null {
+    if (activeCategory === 'flag') return null;
+    const alreadyAnswered = (feedback && id === feedback.countryId) || resultById.has(id);
+    if (!alreadyAnswered) return null;
+    const state = US_STATE_BY_ID[id];
+    return state ? flagSrc(state) : null;
+  }
+  function markerImageFor(marker: PointMarker): string | null {
+    return imageForId(marker.id);
+  }
+  function regionImageFor(region: UsStateRegion): string | null {
+    return imageForId(region.id);
+  }
+
+  function handleTapId(id: string) {
     if (!current || mode !== 'findIt' || feedback) return;
-    const answer: GenericAnswer = { type: 'findIt', clickedId: marker.id };
+    const answer: GenericAnswer = { type: 'findIt', clickedId: id };
     quiz.answer(answer);
+  }
+  function handleMarkerTap(marker: PointMarker) {
+    handleTapId(marker.id);
+  }
+  function handleRegionTap(region: UsStateRegion) {
+    handleTapId(region.id);
   }
 
   function handleTypeSubmit(e: React.FormEvent) {
@@ -322,20 +386,43 @@ export function UsStatesQuizScreen({ quiz, stats, onViewRecords, onBack }: UsSta
             {feedback.correct ? '✅ Correct!' : `❌ That was ${US_STATE_BY_ID[feedback.countryId]?.name}`}
           </span>
         ) : (
-          promptLead()
+          <>
+            {promptLead()}
+            <button
+              type="button"
+              className="quiz-skip"
+              onClick={quiz.skip}
+              disabled={!canSkip}
+              title="Come back to this one later in the session"
+            >
+              Skip for now ⤼
+            </button>
+          </>
         )}
       </div>
 
-      {/* Real land, flat neutral color — background context (this is where the state markers
-          sit) with no interactive country layer of its own. */}
-      <WorldMap
-        fillFor={() => 'var(--map-land)'}
-        markers={markers}
-        markerFillFor={markerFillFor}
-        markerImageFor={markerImageFor}
-        onMarkerTap={handleMarkerTap}
-        showCountryMarkers={false}
-      />
+      {/* Real land, flat neutral color — background context underneath either layer below (a
+          real US-state shape, when showBorders, still needs the rest of the world drawn in
+          around it). */}
+      {showBorders ? (
+        <WorldMap
+          fillFor={() => 'var(--map-land)'}
+          regions={regions}
+          regionFillFor={regionFillFor}
+          regionImageFor={regionImageFor}
+          onRegionTap={handleRegionTap}
+          showCountryMarkers={false}
+        />
+      ) : (
+        <WorldMap
+          fillFor={() => 'var(--map-land)'}
+          markers={markers}
+          markerFillFor={markerFillFor}
+          markerImageFor={markerImageFor}
+          onMarkerTap={handleMarkerTap}
+          showCountryMarkers={false}
+        />
+      )}
 
       {mode === 'typeIt' && current && (
         <form className="quiz-answer-form" onSubmit={handleTypeSubmit}>

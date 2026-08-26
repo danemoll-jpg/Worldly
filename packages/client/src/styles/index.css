@@ -553,6 +553,22 @@ button {
   opacity: 0.85;
 }
 
+.world-map__region {
+  /* Real, directly-tappable US-state borders — the US-states quiz's "with borders" option (see
+     UsStateRegion in geo.ts). A lighter, thinner border than .world-map__country: it's drawn on
+     top of the already-bordered flat country layer underneath, so a heavy stroke here would
+     compete with (and half-obscure) the coastline right under it instead of reading as an
+     internal state line. */
+  stroke: rgba(224, 164, 88, 0.55);
+  stroke-width: 1;
+  cursor: pointer;
+  transition: fill 0.2s ease;
+}
+
+.world-map__region:hover {
+  filter: brightness(1.15);
+}
+
 .world-map__flag {
   /* Constant screen-size (see WorldMap.tsx's counter-scaling transform, same trick as
      .world-map__tiny-marker) — an emoji glyph, not text, so text-anchor/dominant-baseline just
