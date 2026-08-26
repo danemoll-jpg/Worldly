@@ -14,7 +14,7 @@
 import { doc, onSnapshot, runTransaction, setDoc } from 'firebase/firestore';
 import { applySessionToStats, mergeStatsMaps, QuizAnswerResult, StatsMap } from '@worldly/engine';
 import { db } from './firebase';
-import { mergeHistory, SessionRecord } from '../lib/storage';
+import { DailyChallengeState, DEFAULT_DAILY_CHALLENGE_STATE, mergeDailyChallengeState, mergeHistory, SessionRecord } from '../lib/storage';
 
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I, easy to read/type aloud
 
@@ -23,6 +23,12 @@ export interface SyncDoc {
   updatedAt: number;
   stats: StatsMap;
   history: SessionRecord[];
+  /** Optional so a doc created before this field existed still deserializes fine — every reader
+   * here falls back to DEFAULT_DAILY_CHALLENGE_STATE (or, in the realtime subscription, just
+   * leaves whatever's already showing locally alone) rather than treating "field absent" the
+   * same as "field present and empty," which would wrongly wipe a real local streak the first
+   * time an old doc is read after this shipped. */
+  dailyChallenge?: DailyChallengeState;
 }
 
 function generateSyncCode(length = 6): string {
@@ -37,10 +43,10 @@ function syncRef(code: string) {
 
 /** Starts a new sync code, seeded with whatever's on this device right now. Returns the code —
  * share it with your other devices (or "connect" them to it) to bring them in. */
-export async function createSyncCode(localStats: StatsMap, localHistory: SessionRecord[]): Promise<string> {
+export async function createSyncCode(localStats: StatsMap, localHistory: SessionRecord[], localDaily: DailyChallengeState): Promise<string> {
   const code = generateSyncCode();
   const now = Date.now();
-  const seed: SyncDoc = { createdAt: now, updatedAt: now, stats: localStats, history: localHistory };
+  const seed: SyncDoc = { createdAt: now, updatedAt: now, stats: localStats, history: localHistory, dailyChallenge: localDaily };
   await setDoc(syncRef(code), seed);
   return code;
 }
@@ -49,19 +55,28 @@ export async function createSyncCode(localStats: StatsMap, localHistory: Session
  * "clear my stats & history" reset. A plain LOCAL clear alone wouldn't stick while connected:
  * the Firestore doc is the single source of truth once synced (see this file's header comment),
  * so the very next snapshot would just silently bring the old data straight back. Overwriting
- * the doc itself (not a transaction — this is a deliberate full reset, not applying one more
- * session) is what actually makes the reset stick, and pushes the clean slate out to every other
- * device sharing this code too. */
+ * just the named fields (`{ merge: true }` — not a transaction, this is a deliberate full reset
+ * of stats/history specifically, not applying one more session) is what actually makes the reset
+ * stick, and pushes the clean slate out to every other device sharing this code too.
+ * Deliberately leaves `dailyChallenge` untouched: the button is named "clear my stats &
+ * history," and a daily streak reads as neither to a player — same "don't touch it" stance the
+ * feature already had before it lived in this same document (a plain top-level replace instead
+ * of `merge: true` would have silently wiped it as a side effect of not mentioning it). */
 export async function resetSyncDoc(code: string): Promise<void> {
   const now = Date.now();
-  const cleared: SyncDoc = { createdAt: now, updatedAt: now, stats: {}, history: [] };
-  await setDoc(syncRef(code), cleared);
+  const cleared = { createdAt: now, updatedAt: now, stats: {}, history: [] };
+  await setDoc(syncRef(code), cleared, { merge: true });
 }
 
 /** Joins an existing sync code — folds whatever this device already has locally into the
  * shared copy (once; see the module doc comment), and returns the merged result so the caller
  * can adopt it immediately instead of waiting on the subscription's first tick. */
-export async function connectToSyncCode(code: string, localStats: StatsMap, localHistory: SessionRecord[]): Promise<SyncDoc> {
+export async function connectToSyncCode(
+  code: string,
+  localStats: StatsMap,
+  localHistory: SessionRecord[],
+  localDaily: DailyChallengeState,
+): Promise<SyncDoc> {
   const ref = syncRef(code);
   return runTransaction(db, async (tx) => {
     const snap = await tx.get(ref);
@@ -72,6 +87,7 @@ export async function connectToSyncCode(code: string, localStats: StatsMap, loca
       updatedAt: Date.now(),
       stats: mergeStatsMaps(remote.stats, localStats),
       history: mergeHistory(remote.history, localHistory),
+      dailyChallenge: mergeDailyChallengeState(remote.dailyChallenge ?? DEFAULT_DAILY_CHALLENGE_STATE, localDaily),
     };
     tx.set(ref, merged);
     return merged;
@@ -105,4 +121,16 @@ export async function applySessionToSync(code: string, record: SessionRecord, re
     tx.set(ref, next);
     return next;
   });
+}
+
+/** Applies today's daily-challenge result to the shared copy. Deliberately a plain merge write,
+ * not a transaction like applySessionToSync above: `{ merge: true }` only ever touches this one
+ * field, so it can't clobber a stats/history write another device makes at the same moment
+ * (Firestore merges are per top-level field, not whole-document), and the low-stakes,
+ * once-a-day-per-device nature of this field means the rare case of two devices completing the
+ * same day's challenge within moments of each other is fine to resolve as plain last-write-wins
+ * — the loser's local state is still correct locally, and the next realtime snapshot (see
+ * subscribeSyncDoc) reconciles it to whichever write actually landed last. */
+export async function applyDailyChallengeToSync(code: string, dailyChallenge: DailyChallengeState): Promise<void> {
+  await setDoc(syncRef(code), { updatedAt: Date.now(), dailyChallenge }, { merge: true });
 }

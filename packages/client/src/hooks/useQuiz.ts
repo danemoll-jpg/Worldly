@@ -3,6 +3,7 @@ import {
   Answer,
   applySessionToStats,
   COUNTRIES,
+  dailyDateKey,
   isSessionComplete,
   QuizConfig,
   QuizSessionState,
@@ -15,17 +16,30 @@ import {
 } from '@worldly/engine';
 import {
   appendHistory,
+  DailyChallengeState,
+  loadDailyChallengeState,
   loadHistory,
   loadStats,
   newSessionRecordId,
   PersonalBest,
   personalBestFor,
+  saveDailyChallengeState,
   saveHistory,
   saveStats,
   SessionRecord,
 } from '../lib/storage';
-import { applySessionToSync, connectToSyncCode, createSyncCode, resetSyncDoc, subscribeSyncDoc, SyncDoc } from '../network/sync';
+import {
+  applyDailyChallengeToSync,
+  applySessionToSync,
+  connectToSyncCode,
+  createSyncCode,
+  resetSyncDoc,
+  subscribeSyncDoc,
+  SyncDoc,
+} from '../network/sync';
 import { clearSyncCode, getSavedSyncCode, saveSyncCode } from '../network/syncSession';
+
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
 export function continentsKey(continents: QuizConfig['continents']): string {
   return continents === 'all' ? 'all' : [...continents].sort().join(',');
@@ -43,6 +57,7 @@ export type SyncStatus = 'idle' | 'connecting' | 'synced' | 'error';
 export function useQuiz() {
   const [stats, setStats] = useState<StatsMap>(() => loadStats());
   const [history, setHistory] = useState<SessionRecord[]>(() => loadHistory());
+  const [dailyChallenge, setDailyChallenge] = useState<DailyChallengeState>(() => loadDailyChallengeState());
   const [session, setSession] = useState<QuizSessionState | null>(null);
   const [config, setConfig] = useState<QuizConfig | null>(null);
   const [summary, setSummary] = useState<SessionSummary | null>(null);
@@ -54,8 +69,8 @@ export function useQuiz() {
 
   // Always current inside callbacks without needing them as effect/callback dependencies —
   // avoids re-creating `answer` (and therefore anything memoized off it) on every stats tick.
-  const stateRef = useRef({ stats, history, syncCode });
-  stateRef.current = { stats, history, syncCode };
+  const stateRef = useRef({ stats, history, dailyChallenge, syncCode });
+  stateRef.current = { stats, history, dailyChallenge, syncCode };
 
   // Subscribe whenever a sync code is active (on mount, if one was remembered from a previous
   // session, and immediately after createSync/connectSync set one).
@@ -71,6 +86,14 @@ export function useQuiz() {
       setHistory(doc.history);
       saveStats(doc.stats);
       saveHistory(doc.history);
+      // Absent (not just empty) on a doc written before this field existed — leave whatever's
+      // already showing locally alone rather than treating "field missing" the same as "field
+      // present and empty," which would wipe a real local streak the first time an old doc is
+      // read after this shipped (see SyncDoc.dailyChallenge's doc comment).
+      if (doc.dailyChallenge) {
+        setDailyChallenge(doc.dailyChallenge);
+        saveDailyChallengeState(doc.dailyChallenge);
+      }
       setSyncStatus('synced');
     });
     return unsubscribe;
@@ -80,8 +103,8 @@ export function useQuiz() {
     setSyncStatus('connecting');
     setSyncError(null);
     try {
-      const { stats: currentStats, history: currentHistory } = stateRef.current;
-      const code = await createSyncCode(currentStats, currentHistory);
+      const { stats: currentStats, history: currentHistory, dailyChallenge: currentDaily } = stateRef.current;
+      const code = await createSyncCode(currentStats, currentHistory, currentDaily);
       saveSyncCode(code);
       setSyncCode(code);
     } catch (err) {
@@ -94,12 +117,16 @@ export function useQuiz() {
     setSyncStatus('connecting');
     setSyncError(null);
     try {
-      const { stats: currentStats, history: currentHistory } = stateRef.current;
-      const merged = await connectToSyncCode(code, currentStats, currentHistory);
+      const { stats: currentStats, history: currentHistory, dailyChallenge: currentDaily } = stateRef.current;
+      const merged = await connectToSyncCode(code, currentStats, currentHistory, currentDaily);
       setStats(merged.stats);
       setHistory(merged.history);
       saveStats(merged.stats);
       saveHistory(merged.history);
+      if (merged.dailyChallenge) {
+        setDailyChallenge(merged.dailyChallenge);
+        saveDailyChallengeState(merged.dailyChallenge);
+      }
       saveSyncCode(code.toUpperCase());
       setSyncCode(code.toUpperCase());
     } catch (err) {
@@ -129,6 +156,32 @@ export function useQuiz() {
     const { syncCode: currentSyncCode } = stateRef.current;
     if (currentSyncCode) {
       await resetSyncDoc(currentSyncCode);
+    }
+  }, []);
+
+  // Records today's daily-challenge result — folded in here (rather than staying the separate,
+  // localStorage-only hook it used to be) specifically so it goes through the same sync pipeline
+  // stats/history already do: this hook is the one place that already owns `syncCode` and the
+  // live Firestore subscription, so a second independent hook subscribing to the same doc would
+  // just be a second listener on the same data instead of a real shared source of truth.
+  const completeDailyChallenge = useCallback((correct: boolean) => {
+    const { dailyChallenge: prev, syncCode: currentSyncCode } = stateRef.current;
+    const todayKey = dailyDateKey();
+    if (prev.lastPlayedDateKey === todayKey) return; // already recorded today — don't double-count a re-render/replay
+    const yesterdayKey = dailyDateKey(new Date(Date.now() - ONE_DAY_MS));
+    const isConsecutive = prev.lastPlayedDateKey === yesterdayKey;
+    const streak = correct ? (isConsecutive ? prev.streak + 1 : 1) : 0;
+    const next: DailyChallengeState = { lastPlayedDateKey: todayKey, lastPlayedCorrect: correct, streak };
+
+    setDailyChallenge(next);
+    saveDailyChallengeState(next);
+
+    if (currentSyncCode) {
+      applyDailyChallengeToSync(currentSyncCode, next).catch(() => {
+        // Best-effort, same stance as the rest of sync (see the `answer` callback below) — a
+        // failed write doesn't disrupt what's already showing locally, and the next successful
+        // sync (this device's or another's) reconciles it.
+      });
     }
   }, []);
 
@@ -227,6 +280,7 @@ export function useQuiz() {
   return {
     stats,
     history,
+    dailyChallenge,
     session,
     config,
     summary,
@@ -236,6 +290,7 @@ export function useQuiz() {
     skip,
     playAgain,
     goHome,
+    completeDailyChallenge,
     syncCode,
     syncStatus,
     syncError,

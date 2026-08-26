@@ -1,36 +1,41 @@
 import { useState } from 'react';
-import { COUNTRIES } from '@worldly/engine';
+import { COUNTRIES, dailyCountry, dailyDateKey } from '@worldly/engine';
 import { GAME_HUB_URL } from '../lib/hub';
 import { MapFeature } from '../lib/geo';
-import { useDailyChallenge } from '../hooks/useDailyChallenge';
+import { DailyChallengeState } from '../lib/storage';
 import { WorldMap } from './WorldMap';
 
 interface DailyChallengeScreenProps {
+  dailyChallenge: DailyChallengeState;
+  onComplete: (correct: boolean) => void;
   onBack: () => void;
 }
 
 /** One shared, deterministic question a day (see the engine's dailyCountry) — always "find this
  * flag on the map," always exactly one guess, no skip/restart/hint. Not personalized and not
- * folded into the regular history/records/stats pipeline at all — this is its own small,
- * separate streak-tracking feature (see useDailyChallenge), the same way a real daily-puzzle
- * app keeps that counter apart from anything else it tracks about you. */
-export function DailyChallengeScreen({ onBack }: DailyChallengeScreenProps) {
-  const daily = useDailyChallenge(COUNTRIES);
+ * folded into the regular history/stats pipeline at all — this is its own small, separate
+ * streak-tracking feature — but IS folded into the same cross-device sync pipeline those go
+ * through (see useQuiz.ts's completeDailyChallenge), unlike when this screen owned its own
+ * localStorage-only state via the now-removed useDailyChallenge hook. */
+export function DailyChallengeScreen({ dailyChallenge, onComplete, onBack }: DailyChallengeScreenProps) {
+  const todayKey = dailyDateKey();
+  const todaysCountry = dailyCountry(COUNTRIES, todayKey);
+  const hasPlayedToday = dailyChallenge.lastPlayedDateKey === todayKey;
   const [justAnswered, setJustAnswered] = useState<{ correct: boolean } | null>(null);
 
-  const done = daily.hasPlayedToday || justAnswered !== null;
-  const resultCorrect = justAnswered ? justAnswered.correct : daily.lastPlayedCorrect;
+  const done = hasPlayedToday || justAnswered !== null;
+  const resultCorrect = justAnswered ? justAnswered.correct : dailyChallenge.lastPlayedCorrect;
 
   function handleTap(feature: MapFeature) {
     if (!feature.quizzable || done) return;
-    const correct = feature.id === daily.todaysCountry.id;
+    const correct = feature.id === todaysCountry.id;
     setJustAnswered({ correct });
-    daily.complete(correct);
+    onComplete(correct);
   }
 
   function fillFor(feature: MapFeature): string {
     if (!feature.quizzable) return 'var(--map-bg)';
-    if (done && feature.id === daily.todaysCountry.id) {
+    if (done && feature.id === todaysCountry.id) {
       return resultCorrect ? 'var(--map-correct)' : 'var(--map-wrong)';
     }
     return 'var(--map-land)';
@@ -43,14 +48,14 @@ export function DailyChallengeScreen({ onBack }: DailyChallengeScreenProps) {
           ‹ Back
         </button>
         <span className="quiz-header__progress" title="Consecutive days answered correctly">
-          🔥 {daily.streak}
+          🔥 {dailyChallenge.streak}
         </span>
       </div>
 
       {!done && (
         <div className="quiz-prompt">
           <span>
-            Today's flag — find the country: <span className="quiz-prompt__flag">{daily.todaysCountry.flagEmoji}</span>
+            Today's flag — find the country: <span className="quiz-prompt__flag">{todaysCountry.flagEmoji}</span>
           </span>
         </div>
       )}
@@ -63,12 +68,12 @@ export function DailyChallengeScreen({ onBack }: DailyChallengeScreenProps) {
             <div className="game-over__emoji">{resultCorrect ? '🎉' : '📍'}</div>
             <h2>{resultCorrect ? 'Nailed it!' : "That's alright"}</h2>
             <p>
-              Today's flag was <span className="quiz-prompt__flag">{daily.todaysCountry.flagEmoji}</span> —{' '}
-              <strong>{daily.todaysCountry.name}</strong>.
+              Today's flag was <span className="quiz-prompt__flag">{todaysCountry.flagEmoji}</span> —{' '}
+              <strong>{todaysCountry.name}</strong>.
             </p>
             <p>
-              {daily.streak > 0
-                ? `🔥 ${daily.streak}-day streak — come back tomorrow to keep it going.`
+              {dailyChallenge.streak > 0
+                ? `🔥 ${dailyChallenge.streak}-day streak — come back tomorrow to keep it going.`
                 : 'Come back tomorrow for a new one — a correct answer starts a fresh streak.'}
             </p>
             <div className="game-over__actions">

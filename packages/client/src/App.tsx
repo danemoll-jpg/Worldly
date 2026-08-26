@@ -87,7 +87,7 @@ export default function App() {
   }
 
   if (screen === 'daily') {
-    return <DailyChallengeScreen onBack={() => setScreen('home')} />;
+    return <DailyChallengeScreen dailyChallenge={quiz.dailyChallenge} onComplete={quiz.completeDailyChallenge} onBack={() => setScreen('home')} />;
   }
 
   if (screen === 'waterBodies') {
@@ -115,6 +115,7 @@ export default function App() {
 
   return (
     <HomeScreen
+      dailyChallenge={quiz.dailyChallenge}
       onStartQuiz={() => setScreen('setup')}
       onBrowse={() => setScreen('lookup')}
       onMasteryMap={() => setScreen('mastery')}

@@ -8,6 +8,7 @@ import { MultipleChoiceDifficulty, QuizCategory, QuizMode, StatsMap } from '@wor
 
 const STATS_KEY = 'worldlyStats';
 const HISTORY_KEY = 'worldlySessionHistory';
+const DAILY_CHALLENGE_KEY = 'worldlyDailyChallenge';
 export const MAX_HISTORY = 200;
 
 export function loadStats(): StatsMap {
@@ -103,6 +104,52 @@ export function appendHistory(record: SessionRecord): SessionRecord[] {
   const history = [record, ...loadHistory()].slice(0, MAX_HISTORY);
   saveHistory(history);
   return history;
+}
+
+/** The daily-challenge streak (see hooks/useQuiz.ts's completeDailyChallenge and
+ * @worldly/engine's dailyCountry/dailyDateKey) — previously its own separate localStorage-only
+ * feature (`useDailyChallenge.ts`, now folded into useQuiz), deliberately kept out of the synced
+ * `stats`/`history` pipeline. Now part of the same synced SyncDoc those go through (see
+ * network/sync.ts's SyncDoc.dailyChallenge) — living here alongside SessionRecord/StatsMap's own
+ * persistence functions is what makes that possible, the same way SessionRecord already does. */
+export interface DailyChallengeState {
+  lastPlayedDateKey: string | null;
+  lastPlayedCorrect: boolean | null;
+  /** Consecutive days (ending at `lastPlayedDateKey`) with a CORRECT answer — a wrong answer or
+   * a skipped day both reset it to 0, same "you have to actually keep it up" spirit as any other
+   * daily-streak feature. */
+  streak: number;
+}
+
+export const DEFAULT_DAILY_CHALLENGE_STATE: DailyChallengeState = { lastPlayedDateKey: null, lastPlayedCorrect: null, streak: 0 };
+
+export function loadDailyChallengeState(): DailyChallengeState {
+  try {
+    const raw = localStorage.getItem(DAILY_CHALLENGE_KEY);
+    return raw ? (JSON.parse(raw) as DailyChallengeState) : DEFAULT_DAILY_CHALLENGE_STATE;
+  } catch {
+    return DEFAULT_DAILY_CHALLENGE_STATE;
+  }
+}
+
+export function saveDailyChallengeState(state: DailyChallengeState): void {
+  try {
+    localStorage.setItem(DAILY_CHALLENGE_KEY, JSON.stringify(state));
+  } catch {
+    // ignore — see saveStats
+  }
+}
+
+/** Reconciles two independently-grown copies of the daily-challenge streak — used the one time a
+ * device connects to an existing sync code (see network/sync.ts's connectToSyncCode), same spirit
+ * as mergeStatsMaps/mergeHistory but for a single running counter rather than a map/list: there's
+ * no meaningful way to "add" two streaks together, so whichever device most recently actually
+ * played is simply the authoritative one — a streak from a stale, out-of-date device isn't a
+ * second data point to combine, it's just superseded information. */
+export function mergeDailyChallengeState(a: DailyChallengeState, b: DailyChallengeState): DailyChallengeState {
+  if (!a.lastPlayedDateKey) return b;
+  if (!b.lastPlayedDateKey) return a;
+  return a.lastPlayedDateKey >= b.lastPlayedDateKey ? a : b;
 }
 
 /** Unions two independently-grown history lists (same one-time use as the engine's

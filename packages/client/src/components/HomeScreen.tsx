@@ -1,9 +1,10 @@
-import { COUNTRIES } from '@worldly/engine';
+import { dailyDateKey } from '@worldly/engine';
 import { GAME_HUB_URL } from '../lib/hub';
-import { useDailyChallenge } from '../hooks/useDailyChallenge';
+import { DailyChallengeState } from '../lib/storage';
 import { SyncStatus } from '../hooks/useQuiz';
 
 interface HomeScreenProps {
+  dailyChallenge: DailyChallengeState;
   onStartQuiz: () => void;
   onBrowse: () => void;
   onMasteryMap: () => void;
@@ -17,6 +18,7 @@ interface HomeScreenProps {
 }
 
 export function HomeScreen({
+  dailyChallenge,
   onStartQuiz,
   onBrowse,
   onMasteryMap,
@@ -29,7 +31,7 @@ export function HomeScreen({
   syncCode,
 }: HomeScreenProps) {
   const synced = syncStatus === 'synced' && !!syncCode;
-  const daily = useDailyChallenge(COUNTRIES);
+  const hasPlayedToday = dailyChallenge.lastPlayedDateKey === dailyDateKey();
 
   return (
     <div className="start-screen">
@@ -48,8 +50,8 @@ export function HomeScreen({
             <span className="home-screen__choice-emoji">🔥</span>
             <span className="home-screen__choice-title">Daily challenge</span>
             <span className="home-screen__choice-sub">
-              {daily.hasPlayedToday
-                ? `Done for today — ${daily.streak > 0 ? `${daily.streak}-day streak` : 'come back tomorrow'}.`
+              {hasPlayedToday
+                ? `Done for today — ${dailyChallenge.streak > 0 ? `${dailyChallenge.streak}-day streak` : 'come back tomorrow'}.`
                 : 'One shared flag a day — everyone gets the same one.'}
             </span>
           </button>
