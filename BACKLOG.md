@@ -23,29 +23,42 @@ just forgotten.
   mean folding the daily-challenge state (`lastPlayedDateKey`/`lastPlayedCorrect`/`streak`) into
   the same synced document `history`/`stats` already use, same idea as the reset feature's
   `resetSyncDoc` — not started, not scoped beyond this.
-- **Seas and oceans quiz — new feature, not built.** Find/name bodies of water (oceans — Pacific,
-  Atlantic, Indian, Southern, Arctic — plus major seas — Mediterranean, Caribbean, Baltic, Red
-  Sea, etc.), the water equivalent of the existing country quiz. Confirmed the current map data
-  can't support this as-is: `countries-10m.json` only has `countries` and `land` topojson objects
-  — no water-body geometry at all, so this needs an entirely new geometry source (ocean/sea
-  boundary polygons), not just new quiz config on top of existing data, unlike the flags/capitals
-  category work which reused `countries.ts` untouched. Also an open question worth deciding before
-  building: seas nest inside oceans (Mediterranean is part of the Atlantic) and their boundaries
-  are conventional/fuzzy rather than hard-edged like country borders — may need its own
-  find-it/click-a-region interaction rather than assuming the exact `WorldMap` country-tap model
-  ports over cleanly. Not scoped beyond this.
-- **US states / state capitals / state flags quiz — new feature, not built.** Confirmed nothing
-  like this exists today: `countries.ts` is sovereign-nation data only (the one "United States"
-  row is the country itself, not its states), no `usStates.ts` or similar file exists anywhere in
-  the repo. Would need its own new dataset — 50 states, each with a capital and (unlike
-  countries, which get away with a `flagEmoji`) a real state flag image, since there's no emoji
-  set for US state flags — plus a way to pick "US States" as a distinct quiz universe in Setup,
-  parallel to but separate from the existing country/continent scope. Not scoped or designed
-  beyond this — first real step whenever it's picked up is deciding on a data source for the 50
-  state flag images (likely SVG, similar sourcing problem to how country flag data was originally
-  bulk-added).
 
 ## Done
+
+- **Seas and oceans quiz — shipped.** Find/name bodies of water (5 oceans + 15 major seas), the
+  water equivalent of the country quiz. The open question flagged here — seas nest inside oceans
+  and have fuzzy, conventional boundaries, so the exact `WorldMap` country-tap model might not
+  port over — was resolved with the user rather than guessed: each body is a hand-picked
+  open-water marker point (reusing the tiny-country marker/adaptive-tap-radius machinery already
+  in `geo.ts`), not a claimed real boundary polygon, which sidesteps the nesting problem entirely
+  since points don't overlap the way polygons would. New shared engine infra
+  (`genericSession.ts`) generic over any `{id, name, aliases?}` item, reused by the US-states quiz
+  below. `WaterBodyQuizScreen.tsx`, self-contained (setup → play → summary) rather than reusing
+  the country quiz's screens, whose config surface is much bigger than this quiz needs.
+  Local-only miss-tracking (not synced, no personal-bests/mastery-map integration — those were
+  built incrementally for the country quiz as separate features and nothing here asked for them).
+  Verified with a live Playwright smoke test against the running app (screenshots + a real
+  answer-flow click-through), which caught a real bug the build/typecheck couldn't: `WorldMap`'s
+  tiny-country dots (Vatican City, Nauru, ...) and microstate insets were rendering unconditionally
+  underneath the new water-body markers, visually indistinguishable from the real targets — fixed
+  with a new `showCountryMarkers` flag. Commit `8f6ad4e`.
+
+- **US states / state capitals / state flags quiz — shipped.** All 50 states (not DC or
+  territories — the backlog's own "50 states" framing), quizzable on name, capital, or flag, by
+  find-it-on-the-map or type-it. Two decisions made with the user before building: (1) flag image
+  source — Wikimedia Commons SVGs, self-hosted under `public/data/flags/us-states/`, same
+  bundle-locally pattern as `countries-10m.json` rather than a live hotlink (see that folder's
+  `SOURCE.md`); (2) how states are findable on the map at all — not explicitly called out in this
+  entry originally, but the same problem as seas/oceans: `countries-10m.json` has the USA as one
+  whole-country shape, no internal state borders, so there's no real polygon to tap. Extended the
+  seas/oceans decision by consistency (each state marked at its capital's coordinates, reusing the
+  exact same marker infra) rather than re-litigating or guessing a different answer.
+  `UsStatesQuizScreen.tsx`, `usStates.ts`. Same scope boundary as seas/oceans: local-only
+  miss-tracking, no sync/records/mastery-map integration. Verified live (Playwright): state
+  markers cluster correctly over the US (dense in New England, Alaska/Hawaii correctly far afield),
+  the flag category renders a real, correct SVG (spot-checked against Alabama/Texas/Colorado/New
+  Mexico's actual flags), and a full answer round-trip works. Commit `1b71e6e`.
 
 - **Crimea now depicted as part of Ukraine, not Russia — fixed.** Went with the surgical-cut
   approach over sourcing replacement boundary data (the topojson's `countries` object turned out
