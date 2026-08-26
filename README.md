@@ -1,5 +1,12 @@
 # Worldly 🌍
 
+> **About this branch (`no-deploy`):** this branch exists to hand off commits that are finished
+> but not yet on `claude/local-projects-github-vekss2` — the branch Netlify actually builds from
+> for this site. Pushing to a *new* branch name doesn't trigger a Netlify build (only pushes to
+> the deploy branch do), so this is a safe place to land work and clone from locally without
+> spending a deploy. Don't merge this into the deploy branch on its own — that's a separate,
+> deliberate decision each time.
+
 A geography study app — an interactive, pannable/zoomable world map for learning every
 country, not just the well-known ones (197 of them, right down to Tuvalu).
 
