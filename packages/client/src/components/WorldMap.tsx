@@ -21,9 +21,9 @@ interface WorldMapProps {
   /** Fires for a tap on one of `regions` — parallel to `onCountryTap`. */
   onRegionTap?: (region: MapRegion) => void;
   /** Optional image URL to stamp at a region's centroid, on top of its fill — the region-layer
-   * equivalent of `flagFor` below (countries stamp a Unicode flag emoji; US states have no such
-   * codepoint, so this is a real image instead — see UsStatesQuizScreen's flagSrc). Same "learn
-   * the flags out of ordinary play" effect, same skip-when-flag-IS-the-prompt rule. */
+   * equivalent of `flagFor` below (both render a real bundled SVG image now — see
+   * UsStatesQuizScreen's flagSrc / lib/format.ts's countryFlagSrc). Same "learn the flags out of
+   * ordinary play" effect, same skip-when-flag-IS-the-prompt rule. */
   regionImageFor?: (region: MapRegion) => string | null;
   /** Whether to draw the tiny-country dot markers and the microstate insets (Vatican City, the
    * Caribbean cluster, ...) on top of the ordinary country shapes. Defaults to true — every
@@ -43,12 +43,14 @@ interface WorldMapProps {
    * highlighted, right/wrong feedback, mastery-map coloring, ...); this component only knows
    * how to draw and how to pan/zoom/tap. */
   fillFor: (feature: MapFeature) => string;
-  /** Optional flag emoji to stamp at a shape's centroid, on top of its fill — e.g. QuizScreen
+  /** Optional flag image URL to stamp at a shape's centroid, on top of its fill — e.g. QuizScreen
    * shows the answered country's flag once it's been revealed, building a "learn the flags"
-   * effect out of ordinary play instead of needing a dedicated mode for it. Return null (or omit
-   * this prop entirely) for a feature that shouldn't show one right now. Purely decorative:
-   * counter-scaled the same way the tiny-country markers are so it stays a constant, legible
-   * size regardless of zoom, and doesn't affect hit-testing at all. */
+   * effect out of ordinary play instead of needing a dedicated mode for it. A real bundled SVG
+   * (see lib/format.ts's countryFlagSrc), not the Unicode flag emoji — several platforms,
+   * Windows/Chrome included, don't render regional-indicator emoji as flags at all. Return null
+   * (or omit this prop entirely) for a feature that shouldn't show one right now. Purely
+   * decorative: counter-scaled the same way the tiny-country markers are so it stays a constant,
+   * legible size regardless of zoom, and doesn't affect hit-testing at all. */
   flagFor?: (feature: MapFeature) => string | null;
   /** Fires for a genuine tap/click (not the tail end of a pan or pinch) on any shape —
    * including background-only territories; the caller decides whether to act on
@@ -199,9 +201,7 @@ export function WorldMap({
               if (!flag) return null;
               return (
                 <g key={`flag-${i}`} transform={`translate(${f.centroid[0]} ${f.centroid[1]}) scale(${1 / transform.scale})`}>
-                  <text className="world-map__flag" pointerEvents="none">
-                    {flag}
-                  </text>
+                  <image href={flag} x={-13} y={-9} width={26} height={18} className="world-map__flag" pointerEvents="none" />
                 </g>
               );
             })}
@@ -232,9 +232,7 @@ export function WorldMap({
                 {/* Offset above the dot rather than on top of it — the dot's own color is still
                     the correct/wrong signal, the flag sits alongside it instead of covering it. */}
                 {flagFor && flagFor(f) && (
-                  <text y={-15} className="world-map__flag" pointerEvents="none">
-                    {flagFor(f)}
-                  </text>
+                  <image href={flagFor(f)!} x={-13} y={-24} width={26} height={18} className="world-map__flag" pointerEvents="none" />
                 )}
               </g>
             ) : null,

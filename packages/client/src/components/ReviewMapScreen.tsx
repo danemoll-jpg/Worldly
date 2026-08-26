@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { COUNTRY_BY_ID, QuizAnswerResult } from '@worldly/engine';
+import { countryFlagSrc } from '../lib/format';
 import { MapFeature } from '../lib/geo';
 import { WorldMap } from './WorldMap';
 
@@ -36,7 +37,8 @@ export function ReviewMapScreen({ results, onBack }: ReviewMapScreenProps) {
 
   function flagFor(feature: MapFeature): string | null {
     if (!resultByCountry.has(feature.id)) return null;
-    return COUNTRY_BY_ID[feature.id]?.flagEmoji ?? null;
+    const country = COUNTRY_BY_ID[feature.id];
+    return country ? countryFlagSrc(country) : null;
   }
 
   return (

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { COUNTRIES, COUNTRY_BY_ID } from '@worldly/engine';
+import { countryFlagSrc } from '../lib/format';
 import { MapFeature } from '../lib/geo';
 import { WorldMap } from './WorldMap';
 
@@ -55,7 +56,7 @@ export function LookupScreen({ onBack }: LookupScreenProps) {
       {selected && (
         <div className="lookup-detail">
           <div className="lookup-detail__headline">
-            <span className="lookup-detail__flag">{selected.flagEmoji}</span>
+            <img className="lookup-detail__flag" src={countryFlagSrc(selected)} alt="" />
             <div>
               <strong>{selected.name}</strong> — {selected.continent}
             </div>

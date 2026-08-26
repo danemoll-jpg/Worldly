@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { COUNTRIES, dailyCountry, dailyDateKey } from '@worldly/engine';
+import { countryFlagSrc } from '../lib/format';
 import { GAME_HUB_URL } from '../lib/hub';
 import { MapFeature } from '../lib/geo';
 import { DailyChallengeState } from '../lib/storage';
@@ -55,7 +56,7 @@ export function DailyChallengeScreen({ dailyChallenge, onComplete, onBack }: Dai
       {!done && (
         <div className="quiz-prompt">
           <span>
-            Today's flag — find the country: <span className="quiz-prompt__flag">{todaysCountry.flagEmoji}</span>
+            Today's flag — find the country: <img className="quiz-prompt__flag" src={countryFlagSrc(todaysCountry)} alt="" />
           </span>
         </div>
       )}
@@ -68,7 +69,7 @@ export function DailyChallengeScreen({ dailyChallenge, onComplete, onBack }: Dai
             <div className="game-over__emoji">{resultCorrect ? '🎉' : '📍'}</div>
             <h2>{resultCorrect ? 'Nailed it!' : "That's alright"}</h2>
             <p>
-              Today's flag was <span className="quiz-prompt__flag">{todaysCountry.flagEmoji}</span> —{' '}
+              Today's flag was <img className="quiz-prompt__flag" src={countryFlagSrc(todaysCountry)} alt="" /> —{' '}
               <strong>{todaysCountry.name}</strong>.
             </p>
             <p>

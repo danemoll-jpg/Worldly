@@ -585,13 +585,11 @@ button {
 
 .world-map__flag {
   /* Constant screen-size (see WorldMap.tsx's counter-scaling transform, same trick as
-     .world-map__tiny-marker) — an emoji glyph, not text, so text-anchor/dominant-baseline just
-     center it on its own counter-scaled <g> origin. Sized to actually read as "a flag," not a
-     small label — big enough that the shape/colors are legible at a glance, which is the whole
-     point of stamping it there in the first place. */
-  font-size: 26px;
-  text-anchor: middle;
-  dominant-baseline: central;
+     .world-map__tiny-marker) — a real flag <image>, positioned/sized via its own x/y/width/height
+     rather than CSS since it isn't text. A thin drop shadow keeps pale flags (Japan, Poland, ...)
+     readable against similarly pale land/water underneath, instead of relying on font rendering
+     the way the old emoji version did. */
+  filter: drop-shadow(0 0 1.5px rgba(0, 0, 0, 0.6));
   user-select: none;
 }
 
@@ -762,17 +760,19 @@ button {
 /* ---------- Flag prompt ---------- */
 
 .quiz-prompt__flag {
-  /* A flag emoji at normal text size is hard to make out — this is the whole prompt for the
-     flags category, so it earns real size. */
-  font-size: 2.4rem;
-  line-height: 1;
+  /* Real flag SVG (countryFlagSrc) — this is the whole prompt for the flags category, so it
+     earns real size. A thin border since several flags are white/pale (Japan, Poland, ...) and
+     would otherwise blend into the card behind them. */
+  height: 2.4rem;
+  width: auto;
   vertical-align: middle;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 2px;
 }
 
-/* Same idea as .quiz-prompt__flag above, but for the US-states quiz's real SVG flag images
-   (countries use a Unicode emoji, states don't have one — see usStates.ts) — sized to read as
-   the whole prompt, same as the emoji version, with a thin border since several state flags are
-   white/pale and would otherwise blend into the card behind them. */
+/* Same idea as .quiz-prompt__flag above, for the US-states quiz's real SVG flag images
+   (see usStates.ts's flagSrc) — identical sizing/border treatment, just a separate class since
+   the two quizzes' prompt markup doesn't share a component. */
 .quiz-prompt__state-flag {
   height: 2.4rem;
   width: auto;
@@ -851,8 +851,10 @@ button {
 }
 
 .lookup-detail__flag {
-  font-size: 1.8rem;
-  line-height: 1;
+  height: 1.8rem;
+  width: auto;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 2px;
 }
 
 .lookup-detail__facts {

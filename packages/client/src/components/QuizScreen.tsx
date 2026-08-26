@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Answer, Continent, CONTINENTS, CountryDef, COUNTRY_BY_ID, QuizAnswerResult, QuizSessionState } from '@worldly/engine';
 import { ConfirmDialog } from './ConfirmDialog';
-import { promptFor } from '../lib/format';
+import { countryFlagSrc, promptFor } from '../lib/format';
 import { MapFeature } from '../lib/geo';
 import { pickChoices } from '../lib/multipleChoice';
 import { WorldMap } from './WorldMap';
@@ -113,7 +113,9 @@ export function QuizScreen({ session, onAnswer, onSkip, onQuit, onRestart }: Qui
   function flagFor(feature: MapFeature): string | null {
     if (category === 'flag' || !feature.quizzable) return null;
     const alreadyAnswered = (feedback && feature.id === feedback.result.countryId) || resultByCountry.has(feature.id);
-    return alreadyAnswered ? (COUNTRY_BY_ID[feature.id]?.flagEmoji ?? null) : null;
+    if (!alreadyAnswered) return null;
+    const country = COUNTRY_BY_ID[feature.id];
+    return country ? countryFlagSrc(country) : null;
   }
 
   function handleMapTap(feature: MapFeature) {
@@ -178,7 +180,7 @@ export function QuizScreen({ session, onAnswer, onSkip, onQuit, onRestart }: Qui
       return (
         <span>
           Find the country with {label}:{' '}
-          {prompt.kind === 'flag' ? <span className="quiz-prompt__flag">{prompt.content}</span> : <strong>{prompt.content}</strong>}
+          {prompt.kind === 'flag' ? <img className="quiz-prompt__flag" src={prompt.content} alt="" /> : <strong>{prompt.content}</strong>}
         </span>
       );
     }

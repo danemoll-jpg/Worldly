@@ -1,5 +1,16 @@
 import { CountryDef, MultipleChoiceDifficulty, QuizCategory, QuizMode } from '@worldly/engine';
 
+/** A country's real flag SVG, bundled locally by `id` — see
+ * public/data/flags/countries/SOURCE.md. Real images rather than the Unicode flag emoji
+ * (`CountryDef.flagEmoji`, still kept on the data for anywhere a quick inline glyph is enough)
+ * because several platforms — Windows/Chrome among them — don't render regional-indicator flag
+ * emoji as flags at all, showing the two-letter country code as plain text instead. That's not
+ * just a handful of small/obscure flags either: it affected the United States' own flag, so a
+ * real image is the only way every flag reliably looks like a flag everywhere. */
+export function countryFlagSrc(country: CountryDef): string {
+  return `${import.meta.env.BASE_URL}data/flags/countries/${country.id}.svg`;
+}
+
 export function formatDuration(ms: number): string {
   const totalSeconds = Math.round(ms / 1000);
   const minutes = Math.floor(totalSeconds / 60);
@@ -46,7 +57,7 @@ export function describeGenericConfig(mode: 'findIt' | 'typeIt', scope: 'all' | 
  * lumped in with 'text' — callers render it at a much larger size, since a tiny flag emoji is
  * hard to make out. */
 export function promptFor(category: QuizCategory, country: CountryDef): { kind: 'text' | 'flag'; content: string } {
-  if (category === 'flag') return { kind: 'flag', content: country.flagEmoji };
+  if (category === 'flag') return { kind: 'flag', content: countryFlagSrc(country) };
   if (category === 'capital') return { kind: 'text', content: country.capitals[0] };
   return { kind: 'text', content: country.name };
 }
