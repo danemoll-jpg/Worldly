@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { GenericAnswer, masteryLevel, QuizAnswerResult, StatsMap, WaterBodyDef, WATER_BODIES, WATER_BODY_BY_ID } from '@worldly/engine';
-import { getWaterBodyMarkers, PointMarker } from '../lib/geo';
+import { getWaterBodyMarkers, getWaterBodyRegions, MapRegion, PointMarker } from '../lib/geo';
 import { GenericQuizController } from '../hooks/useGenericQuiz';
 import { isBetterSession } from '../lib/storage';
 import { WorldMap } from './WorldMap';
@@ -13,16 +13,36 @@ interface WaterBodyQuizScreenProps {
 }
 
 const FEEDBACK_DISPLAY_MS = 1200;
+const SHOW_BORDERS_KEY = 'worldlyWaterBodiesShowBorders';
+
+function loadShowBorders(): boolean {
+  try {
+    const raw = localStorage.getItem(SHOW_BORDERS_KEY);
+    return raw === null ? true : raw === 'true'; // borders on by default
+  } catch {
+    return true;
+  }
+}
+
+function saveShowBorders(value: boolean): void {
+  try {
+    localStorage.setItem(SHOW_BORDERS_KEY, String(value));
+  } catch {
+    // ignore — just a display preference, no worse than not remembering it
+  }
+}
 
 /** "Find the ocean/sea on the map, or type its name" — the water equivalent of the country
  * quiz, built on the shared genericSession/useGenericQuiz machinery instead of session.ts's
- * (country-specific) one. See waterBodies.ts's doc comment for why these are marker points, not
- * real boundary shapes: bodies of water nest (the Mediterranean is part of the Atlantic) and
- * have conventional, fuzzy boundaries, so a findable point sidesteps that entirely instead of
- * mis-claiming a precise border. Self-contained (setup → play → summary in one screen) rather
- * than reusing SetupScreen/QuizScreen/SummaryScreen — those were built around the country quiz's
- * much larger config surface (category, continents, multiple-choice difficulty); this quiz's
- * surface is just mode + scope.
+ * (country-specific) one. Two ways to find a body of water on the map (`showBorders`, a
+ * player-chosen toggle, persisted): real bordered/tappable region shapes (`getWaterBodyRegions`
+ * — see MapRegion's doc comment in geo.ts and water-body-regions.json.SOURCE.md for how a
+ * genuinely non-overlapping named tessellation of the ocean turned up, resolving the
+ * nesting/fuzzy-boundary problem that originally ruled real borders out), or the original
+ * marker-dot approach (`getWaterBodyMarkers`, one dot per body). Self-contained (setup → play →
+ * summary in one screen) rather than reusing SetupScreen/QuizScreen/SummaryScreen — those were
+ * built around the country quiz's much larger config surface (category, continents,
+ * multiple-choice difficulty); this quiz's surface is just mode + scope + map style.
  *
  * `quiz`/`stats` come from useQuiz.ts, which owns persistence/sync for this universe — this
  * component is purely presentational over that controller, same relationship QuizScreen has to
@@ -31,6 +51,8 @@ export function WaterBodyQuizScreen({ quiz, stats, onViewRecords, onBack }: Wate
   const [feedback, setFeedback] = useState<QuizAnswerResult | null>(null);
   const [typedAnswer, setTypedAnswer] = useState('');
   const [markers, setMarkers] = useState<PointMarker[]>([]);
+  const [regions, setRegions] = useState<MapRegion[]>([]);
+  const [showBorders, setShowBorders] = useState<boolean>(loadShowBorders);
   const [pendingMode, setPendingMode] = useState<'findIt' | 'typeIt'>('findIt');
   const [pendingScope, setPendingScope] = useState<'all' | 'weakSpots'>('all');
   const seenResultCount = useRef(0);
@@ -40,10 +62,18 @@ export function WaterBodyQuizScreen({ quiz, stats, onViewRecords, onBack }: Wate
     getWaterBodyMarkers().then((loaded) => {
       if (!cancelled) setMarkers(loaded);
     });
+    getWaterBodyRegions().then((loaded) => {
+      if (!cancelled) setRegions(loaded);
+    });
     return () => {
       cancelled = true;
     };
   }, []);
+
+  function toggleShowBorders(value: boolean) {
+    setShowBorders(value);
+    saveShowBorders(value);
+  }
 
   const session = quiz.session;
 
@@ -84,10 +114,21 @@ export function WaterBodyQuizScreen({ quiz, stats, onViewRecords, onBack }: Wate
           </button>
           <h1>🌊 Seas & oceans</h1>
           <p className="start-screen__subtitle">
-            Find the 5 oceans and {WATER_BODIES.length - 5} major seas — marked with a dot at roughly their center rather
-            than a claimed exact boundary, since real ones nest and blur together (the Mediterranean is part of the
-            Atlantic, for instance).
+            Find the 5 oceans and {WATER_BODIES.length - 5} major seas — with real boundaries on the map, or switch to
+            simple marker dots below if you'd rather.
           </p>
+
+          <label className="start-screen__label">
+            Map style
+            <div className="start-screen__options">
+              <button type="button" className={showBorders ? 'active' : ''} onClick={() => toggleShowBorders(true)}>
+                With borders
+              </button>
+              <button type="button" className={!showBorders ? 'active' : ''} onClick={() => toggleShowBorders(false)}>
+                Dots only
+              </button>
+            </div>
+          </label>
 
           <label className="start-screen__label">
             How do you want to be quizzed?
@@ -140,23 +181,38 @@ export function WaterBodyQuizScreen({ quiz, stats, onViewRecords, onBack }: Wate
   // is left — skipping the last question would have nothing to swap it with.
   const canSkip = !!current && !feedback && session.remaining.length > 1;
 
-  function markerFillFor(marker: PointMarker): string {
-    if (feedback && marker.id === feedback.countryId) {
+  // Shared by both the marker-dot and real-border rendering — same state, same rules,
+  // regardless of which the player's picked (see `showBorders`), just keyed by id instead of by
+  // a specific PointMarker/MapRegion shape.
+  function fillForId(id: string): string {
+    if (feedback && id === feedback.countryId) {
       return feedback.correct ? 'var(--map-correct)' : 'var(--map-wrong)';
     }
-    if (mode === 'typeIt' && current && marker.id === current.id) {
+    if (mode === 'typeIt' && current && id === current.id) {
       return 'var(--map-target)';
     }
-    const prior = resultById.get(marker.id);
+    const prior = resultById.get(id);
     if (prior === true) return 'var(--map-answered)';
     if (prior === false) return 'var(--map-missed)';
     return 'var(--map-land)';
   }
+  function markerFillFor(marker: PointMarker): string {
+    return fillForId(marker.id);
+  }
+  function regionFillFor(region: MapRegion): string {
+    return fillForId(region.id);
+  }
 
-  function handleMarkerTap(marker: PointMarker) {
+  function handleTapId(id: string) {
     if (!current || mode !== 'findIt' || feedback) return;
-    const answer: GenericAnswer = { type: 'findIt', clickedId: marker.id };
+    const answer: GenericAnswer = { type: 'findIt', clickedId: id };
     quiz.answer(answer);
+  }
+  function handleMarkerTap(marker: PointMarker) {
+    handleTapId(marker.id);
+  }
+  function handleRegionTap(region: MapRegion) {
+    handleTapId(region.id);
   }
 
   function handleTypeSubmit(e: React.FormEvent) {
@@ -267,15 +323,26 @@ export function WaterBodyQuizScreen({ quiz, stats, onViewRecords, onBack }: Wate
         ) : null}
       </div>
 
-      {/* Real land, in a flat neutral color — background context only (there's nothing to tap
-          on the landmass itself for this quiz, just the water markers on top of it). */}
-      <WorldMap
-        fillFor={() => 'var(--map-land)'}
-        markers={markers}
-        markerFillFor={markerFillFor}
-        onMarkerTap={handleMarkerTap}
-        showCountryMarkers={false}
-      />
+      {/* Real land, in a flat neutral color — background context underneath either layer below
+          (a real sea/ocean shape, when showBorders, still needs the rest of the world drawn in
+          around it). */}
+      {showBorders ? (
+        <WorldMap
+          fillFor={() => 'var(--map-land)'}
+          regions={regions}
+          regionFillFor={regionFillFor}
+          onRegionTap={handleRegionTap}
+          showCountryMarkers={false}
+        />
+      ) : (
+        <WorldMap
+          fillFor={() => 'var(--map-land)'}
+          markers={markers}
+          markerFillFor={markerFillFor}
+          onMarkerTap={handleMarkerTap}
+          showCountryMarkers={false}
+        />
+      )}
 
       {mode === 'typeIt' && current && (
         <form className="quiz-answer-form" onSubmit={handleTypeSubmit}>

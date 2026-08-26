@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { getInsets, getMapFeatures, Inset, MAP_VIEWBOX, MapFeature, PointMarker, UsStateRegion } from '../lib/geo';
+import { getInsets, getMapFeatures, Inset, MAP_VIEWBOX, MapFeature, MapRegion, PointMarker } from '../lib/geo';
 import { usePanZoom } from '../lib/panZoom';
 
 interface WorldMapProps {
-  /** Findable point markers with no underlying country shape — the seas/oceans quiz always,
-   * the US-states quiz when its `showBorders` toggle is off (see PointMarker's doc comment for
-   * why the marker approach exists at all). Renders on top of the ordinary country layer using
-   * the exact same constant-on-screen-size, adaptive-tap-radius approach as the tiny-country
-   * markers below (counter-scaled against zoom). Omit entirely for the country quiz, which has
-   * no use for this layer. */
+  /** Findable point markers with no underlying country shape — used when a quiz's `showBorders`-
+   * style toggle is off, or (before real boundary data was found) always, for seas/oceans and
+   * US states alike (see PointMarker's doc comment). Renders on top of the ordinary country
+   * layer using the exact same constant-on-screen-size, adaptive-tap-radius approach as the
+   * tiny-country markers below (counter-scaled against zoom). Omit entirely for the country
+   * quiz, which has no use for this layer. */
   markers?: PointMarker[];
   /** How to color/label a marker's visible dot — parallel to `fillFor`, just for `markers`
    * instead of country shapes. Required whenever `markers` is passed. */
@@ -21,22 +21,20 @@ interface WorldMapProps {
    * "learn the flags out of ordinary play" effect, same skip-when-flag-IS-the-prompt rule.
    * Ignored for `features` — this is markers-only. */
   markerImageFor?: (marker: PointMarker) => string | null;
-  /** Real, bordered, directly-tappable US-state shapes — the US-states quiz's `showBorders`
-   * toggle, ON (see UsStateRegion's doc comment for why this exists as a second option
-   * alongside `markers` rather than replacing it: the marker approach was a deliberate,
-   * necessary fallback for the seas/oceans quiz, which has no real boundary data at all — real
-   * borders were always the better option for US states specifically once sourced). Mutually
-   * exclusive with `markers` in practice (a caller picks one or the other for a given render),
-   * but nothing here enforces that — they're independent layers. */
-  regions?: UsStateRegion[];
+  /** Real, bordered, directly-tappable shapes — the "with borders" option for both the
+   * US-states and seas/oceans quizzes (see MapRegion's doc comment for why both started
+   * marker-only and gained this later, once real boundary data was actually found for each).
+   * Mutually exclusive with `markers` in practice (a caller picks one or the other for a given
+   * render), but nothing here enforces that — they're independent layers. */
+  regions?: MapRegion[];
   /** How to color a region's fill — parallel to `fillFor`/`markerFillFor`. Required whenever
    * `regions` is passed. */
-  regionFillFor?: (region: UsStateRegion) => string;
+  regionFillFor?: (region: MapRegion) => string;
   /** Fires for a tap on one of `regions` — parallel to `onCountryTap`/`onMarkerTap`. */
-  onRegionTap?: (region: UsStateRegion) => void;
+  onRegionTap?: (region: MapRegion) => void;
   /** Optional image URL to stamp at a region's centroid — parallel to `markerImageFor`, for
    * `regions` instead of `markers`. */
-  regionImageFor?: (region: UsStateRegion) => string | null;
+  regionImageFor?: (region: MapRegion) => string | null;
   /** Whether to draw the tiny-country dot markers and the microstate insets (Vatican City, the
    * Caribbean cluster, ...) on top of the ordinary country shapes. Defaults to true — every
    * existing caller (the country quiz, the mastery map, lookup) wants these. Set to false for a
@@ -131,7 +129,7 @@ export function WorldMap({
   }, [markers]);
 
   const regionById = useMemo(() => {
-    const m = new Map<string, UsStateRegion>();
+    const m = new Map<string, MapRegion>();
     for (const region of regions ?? []) m.set(region.id, region);
     return m;
   }, [regions]);
@@ -264,15 +262,27 @@ export function WorldMap({
               )}
             </g>
           ))}
-          {/* Real, bordered, directly-tappable US-state shapes — see UsStateRegion's doc
-              comment in geo.ts. Drawn on top of the flat country layer (which still covers the
-              rest of the world for context underneath) rather than replacing it. */}
+          {/* Real, bordered, directly-tappable region shapes (US states or seas/oceans — see
+              MapRegion's doc comment in geo.ts). Drawn on top of the flat country layer (which
+              still covers the rest of the world for context underneath) rather than replacing
+              it. */}
           {regions?.map((region) => (
             <path
               key={region.id}
               data-region-id={region.id}
               d={region.path}
               fill={regionFillFor?.(region) ?? 'var(--map-land)'}
+              // Several water-body regions carry real holes (an ocean's polygon excludes every
+              // separately-named sea/gulf within it, e.g. North Atlantic Ocean's real shape has
+              // ~25 holes cut out for the Caribbean, the Gulf of Mexico, and others) — real-world
+              // shapefile-derived data doesn't reliably follow the exterior-CCW/hole-CW winding
+              // convention SVG's default "nonzero" fill-rule depends on to punch a hole out
+              // correctly, so a hole with the "wrong" winding renders solid instead of transparent
+              // (verified directly: a hole rendered exactly this way is what a blob sitting in
+              // open mid-Atlantic water traced back to). "evenodd" sidesteps the whole problem —
+              // it alternates fill state on each boundary crossing regardless of winding
+              // direction, so nested holes always subtract correctly either way.
+              fillRule="evenodd"
               vectorEffect="non-scaling-stroke"
               className="world-map__region"
             />

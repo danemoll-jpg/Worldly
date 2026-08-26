@@ -4,11 +4,14 @@
 // codes countries.ts uses). Washington DC and the territories (Puerto Rico, Guam, ...) are
 // deliberately excluded — the backlog item that asked for this is scoped to "50 states."
 //
-// Like waterBodies.ts, there's no per-state boundary geometry available (`countries-10m.json`
-// has the USA as a single country-level shape, not broken into states) — so `lon`/`lat` here are
-// each state's capital coordinates, used as a findable marker point on the map (same
-// marker/tap-radius approach as waterBodies.ts and the tiny-country markers in geo.ts), not a
-// claimed boundary.
+// `countries-10m.json` has the USA as a single country-level shape, not broken into states, so
+// `lon`/`lat` here are each state's capital coordinates — originally the ONLY way to place a
+// state on the map at all (a findable marker point, same marker/tap-radius approach as
+// waterBodies.ts and the tiny-country markers in geo.ts); still used as the client's "dots only"
+// map-style option and as every state's on-map marker centroid regardless of which style is
+// picked. Real per-state boundary polygons (`us-atlas`'s states-10m.json — see the client's
+// us-states-10m.json.SOURCE.md) were sourced afterward and are the client's "with borders"
+// map-style option (the default), joined against these entries by state name.
 //
 // `capital` is the seat of state government (always a single city — unlike a few countries in
 // countries.ts, no US state has more than one). Flag images are NOT part of this file — the

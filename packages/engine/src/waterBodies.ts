@@ -1,15 +1,20 @@
 // Oceans and major seas for the "seas and oceans" quiz — the water equivalent of countries.ts,
-// but deliberately a much smaller, simpler shape: no continent, no capitals/languages, and
-// (see the client's geo.ts) no real boundary polygon at all. Unlike countries, ocean/sea
-// boundaries are conventional and fuzzy rather than hard-edged (a sea is "part of" the ocean it
-// opens into — the Mediterranean nests inside the Atlantic, the Baltic inside the Atlantic via
-// the North Sea, ...), and no bundled geometry source has real marine boundary polygons the way
-// `countries-10m.json` has country borders. Decided (with the user, 8/26/2026) not to source one
-// just for this: each body is instead represented by a single hand-picked open-water coordinate
-// — not a claimed precise boundary, just a findable point roughly at its center — reusing the
-// exact same marker/adaptive-tap-radius approach `geo.ts` already built for tiny countries
-// (Vatican City, Nauru, ...), which sidesteps the nesting problem entirely: points don't overlap
-// the way polygons do, even when one body genuinely contains another.
+// but deliberately a much smaller, simpler shape: no continent, no capitals/languages. Unlike
+// countries, ocean/sea boundaries are conventional and fuzzy rather than hard-edged in everyday
+// understanding (a sea is "part of" the ocean it opens into — the Mediterranean nests inside the
+// Atlantic, the Baltic inside the Atlantic via the North Sea, ...), which first read as
+// unresolvable without a real geometry source: `lon`/`lat` here are a hand-picked open-water
+// coordinate per body — not a claimed precise boundary, just a findable point roughly at its
+// center — reusing the same marker/adaptive-tap-radius approach `geo.ts` built for tiny
+// countries (Vatican City, Nauru, ...), still used as the client's "dots only" map-style option
+// and as every region's on-map centroid regardless of which style is picked.
+//
+// Real per-body boundary polygons turned out to exist after all (see the client's
+// water-body-regions.json.SOURCE.md, sourced from Natural Earth's marine-polygons layer) —
+// verified directly that they're a genuine non-overlapping tessellation by name, not a fuzzy
+// approximation, so the nesting problem above doesn't actually block real borders; that's the
+// client's "with borders" map-style option (the default), joined against these entries by name
+// (`geo.ts`'s WATER_BODY_SOURCE_NAMES).
 //
 // `lon`/`lat` are plain WGS84 degrees, hand-picked to fall on open water clear of coastlines —
 // verified against the same projected map the country quiz uses (see the client's geo.ts).

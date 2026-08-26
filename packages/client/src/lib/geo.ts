@@ -408,22 +408,31 @@ export interface PointMarker {
   tapRadius: number;
 }
 
-/** A real US state boundary shape — the "with borders" option for the US-states quiz (see
- * UsStatesQuizScreen's `showBorders` toggle), alongside the marker-point approach `PointMarker`
- * already covers. Exists because `us-atlas`'s `states-10m.json` (see
- * public/data/us-states-10m.json.SOURCE.md) has real per-state geometry, unlike
- * `countries-10m.json`, which only has the USA as one whole-country shape — that's WHY the
- * marker approach was built first (see PointMarker's own doc comment) rather than because real
- * borders weren't wanted. Same shape as MapFeature's core fields (id/name/path/centroid), but
- * deliberately not reusing MapFeature itself: no isTiny/tapRadius/insetGroupId concept applies
- * here (every state is comfortably taggable as its own real shape at US-map zoom levels — this
- * isn't Vatican-City-sized). */
-export interface UsStateRegion {
+/** A real, directly-tappable boundary shape for a quiz universe that (at first) only had marker
+ * points — the "with borders" option for both the US-states quiz (`UsStatesQuizScreen`'s
+ * `showBorders` toggle) and the seas/oceans quiz (`WaterBodyQuizScreen`'s equivalent), alongside
+ * the marker-point approach `PointMarker` already covers for both. Both started marker-only
+ * because no usable boundary data existed at the time (`countries-10m.json` only has the USA as
+ * one whole-country shape; seas/oceans have no hard real-world edges at all, or so it seemed
+ * until Natural Earth's marine-polygons layer turned out to be a genuine non-overlapping
+ * tessellation by name — see water-body-regions.json.SOURCE.md) — real borders were always the
+ * better option once sourced, not a deliberate final call against them. Same shape as
+ * MapFeature's core fields (id/name/path/centroid), but deliberately not reusing MapFeature
+ * itself: no isTiny/tapRadius/insetGroupId concept applies to either of these — every region is
+ * comfortably taggable as its own real shape at the zoom levels its quiz actually uses. */
+export interface MapRegion {
   id: string;
   name: string;
   path: string;
   centroid: [number, number];
 }
+
+/** Alias of MapRegion, kept so US-states-specific code reads clearly — every US state region IS
+ * a MapRegion, just not the only kind anymore (see WaterBodyRegion below). */
+export type UsStateRegion = MapRegion;
+
+/** Alias of MapRegion, kept so seas/oceans-specific code reads clearly. */
+export type WaterBodyRegion = MapRegion;
 
 interface MapData {
   features: MapFeature[];
@@ -431,6 +440,7 @@ interface MapData {
   waterBodyMarkers: PointMarker[];
   usStateMarkers: PointMarker[];
   usStateRegions: UsStateRegion[];
+  waterBodyRegions: WaterBodyRegion[];
 }
 
 let cachedPromise: Promise<MapData> | null = null;
@@ -562,8 +572,9 @@ async function loadMapData(): Promise<MapData> {
   const waterBodyMarkers = projectPointMarkers(WATER_BODIES, projection, MIN_TAP_RADIUS, MAX_TAP_RADIUS, TAP_RADIUS_MARGIN);
   const usStateMarkers = projectPointMarkers(US_STATES, projection, MIN_TAP_RADIUS, MAX_TAP_RADIUS, TAP_RADIUS_MARGIN);
   const usStateRegions = await loadUsStateRegions(pathGenerator);
+  const waterBodyRegions = await loadWaterBodyRegions(projection, pathGenerator);
 
-  return { features, insets, waterBodyMarkers, usStateMarkers, usStateRegions };
+  return { features, insets, waterBodyMarkers, usStateMarkers, usStateRegions, waterBodyRegions };
 }
 
 const US_STATE_ID_BY_NAME = new Map<string, string>(US_STATES.map((s: UsStateDef) => [s.name, s.id]));
@@ -600,6 +611,120 @@ async function loadUsStateRegions(pathGenerator: ReturnType<typeof geoPath>): Pr
   return regions;
 }
 
+/** Which named feature(s) in water-body-regions.json make up each of waterBodies.ts's 20 quiz
+ * entries — a list rather than a single name because the Pacific and Atlantic are each split
+ * into North/South halves in the source data (see that file's SOURCE.md); every other body is a
+ * 1:1 name match. Two (or more) source features sharing one quiz id just have their projected
+ * path strings concatenated into one combined `path` (same trick projectFeature already uses to
+ * join a MultiPolygon country's separate pieces into one `<path>` element with several `M…Z`
+ * subpaths) — so each water body still ends up as exactly one MapRegion, one `<path>` element,
+ * one `data-region-id`, regardless of how many named source polygons it's built from. */
+const WATER_BODY_SOURCE_NAMES: Record<string, string[]> = {
+  'pacific-ocean': ['North Pacific Ocean', 'South Pacific Ocean'],
+  'atlantic-ocean': ['North Atlantic Ocean', 'South Atlantic Ocean'],
+  'indian-ocean': ['INDIAN OCEAN'],
+  'southern-ocean': ['SOUTHERN OCEAN'],
+  'arctic-ocean': ['Arctic Ocean'],
+  'mediterranean-sea': ['Mediterranean Sea'],
+  'black-sea': ['Black Sea'],
+  'north-sea': ['North Sea'],
+  'baltic-sea': ['Baltic Sea'],
+  'red-sea': ['Red Sea'],
+  'persian-gulf': ['Persian Gulf'],
+  'arabian-sea': ['Arabian Sea'],
+  'caribbean-sea': ['Caribbean Sea'],
+  'gulf-of-mexico': ['Gulf of Mexico'],
+  'bering-sea': ['Bering Sea'],
+  'sea-of-japan': ['Sea of Japan'],
+  'yellow-sea': ['Yellow Sea'],
+  'south-china-sea': ['South China Sea'],
+  'coral-sea': ['Coral Sea'],
+  'caspian-sea': ['Caspian Sea'],
+};
+
+/** Builds one polygon-with-holes path, dropping only degenerate HOLE rings — never the outer
+ * boundary, however large it legitimately is (several water bodies genuinely span most of the
+ * map's width: the Pacific and the Bering Sea wrap the antimeridian, the Southern Ocean
+ * encircles the globe at high latitude). This is the same MAX_PLAUSIBLE_RING_WIDTH/HEIGHT
+ * artifact projectFeature's own comment documents (Maldives: many small, tightly-clustered
+ * points → d3-geo's adaptive resampling mis-projects a spurious shape covering nearly the whole
+ * map) — just showing up in HOLE rings here instead of separate MultiPolygon pieces: verified
+ * directly that North Atlantic Ocean's real shape carries ~25 small holes (cut out for the
+ * Caribbean, the Gulf of Mexico, and other separately-named seas within it — the exact
+ * "genuine non-overlapping tessellation" property this data was chosen for), and EVERY one of
+ * those hole rings independently reports bounds spanning the entire projected map — not the
+ * small local area each hole is actually meant to carve out. Rendered as one solid blob in open
+ * water before this filter caught it. projectFeature's own filter doesn't help here: it only
+ * inspects per-PIECE bounds for a MultiPolygon, and this is a plain Polygon (one outer ring plus
+ * many holes, not several separate pieces) — so this needed its own, ring-position-aware pass. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function projectPolygonWithHoles(rings: any[], pathGenerator: ReturnType<typeof geoPath>): string {
+  const keptRings = rings.filter((ring, i) => {
+    if (i === 0) return true; // the outer boundary — never filtered, however large
+    const ringFeature = { type: 'Feature' as const, properties: {}, geometry: { type: 'Polygon' as const, coordinates: [ring] } };
+    const bounds = pathGenerator.bounds(ringFeature);
+    const width = bounds[1][0] - bounds[0][0];
+    const height = bounds[1][1] - bounds[0][1];
+    return !(width > MAX_PLAUSIBLE_RING_WIDTH && height > MAX_PLAUSIBLE_RING_HEIGHT);
+  });
+  if (keptRings.length === 0) return '';
+  return pathGenerator({ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: keptRings } }) ?? '';
+}
+
+/** Joins every polygon piece of a region's geometry into one path string — for a plain Polygon
+ * that's just its one outer-ring-plus-holes group (see projectPolygonWithHoles); for a
+ * MultiPolygon (the Pacific, the Bering Sea — each split into a piece on either side of the
+ * antimeridian), each piece gets the same hole-filtering treatment, then all pieces' paths are
+ * concatenated (same "one `<path>` element, several `M…Z` subpaths" trick projectFeature already
+ * uses for MultiPolygon countries). */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function projectRegionPath(f: any, pathGenerator: ReturnType<typeof geoPath>): string {
+  if (f.geometry?.type !== 'MultiPolygon') return projectPolygonWithHoles(f.geometry.coordinates, pathGenerator);
+  const pieces: string[] = [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const polygonRings of f.geometry.coordinates as any[]) {
+    const d = projectPolygonWithHoles(polygonRings, pathGenerator);
+    if (d) pieces.push(d);
+  }
+  return pieces.join(' ');
+}
+
+/** Real sea/ocean boundary shapes — see MapRegion's doc comment and
+ * water-body-regions.json.SOURCE.md for where this data comes from and why it's trustworthy
+ * (verified as a genuine non-overlapping tessellation, not a fuzzy approximation). Each water
+ * body's centroid reuses its own hand-picked marker point (waterBodies.ts's lon/lat, the same
+ * point PointMarker already places a dot at) projected directly, rather than derived from the
+ * polygon bounds — simpler, and already a deliberately-chosen sensible "center" for bodies made
+ * of multiple dateline-split pieces (the Pacific, the Bering Sea) where a bbox-derived centroid
+ * would otherwise land somewhere strange. */
+async function loadWaterBodyRegions(
+  projection: ReturnType<typeof geoNaturalEarth1>,
+  pathGenerator: ReturnType<typeof geoPath>,
+): Promise<WaterBodyRegion[]> {
+  const response = await fetch(`${import.meta.env.BASE_URL}data/water-body-regions.json`);
+  if (!response.ok) throw new Error(`Failed to load water body boundary data (${response.status})`);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const geojson = (await response.json()) as any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const featuresByName = new Map<string, any>(geojson.features.map((f: any) => [f.properties.name, f]));
+
+  const regions: WaterBodyRegion[] = [];
+  for (const body of WATER_BODIES) {
+    const sourceNames = WATER_BODY_SOURCE_NAMES[body.id];
+    if (!sourceNames) continue; // shouldn't happen — every WATER_BODIES entry has a mapping
+    const paths = sourceNames
+      .map((name) => featuresByName.get(name))
+      .filter(Boolean)
+      .map((f) => projectRegionPath(f, pathGenerator));
+    const path = paths.join(' ');
+    if (!path) continue;
+    const centroidPoint = projection([body.lon, body.lat]);
+    if (!centroidPoint) continue;
+    regions.push({ id: body.id, name: body.name, path, centroid: [centroidPoint[0], centroidPoint[1]] });
+  }
+  return regions;
+}
+
 function loadMapDataCached(): Promise<MapData> {
   if (!cachedPromise) cachedPromise = loadMapData();
   return cachedPromise;
@@ -631,7 +756,13 @@ export function getUsStateMarkers(): Promise<PointMarker[]> {
 }
 
 /** Real US state boundary shapes for the US states quiz — the "with borders" option (see
- * UsStateRegion's doc comment). */
+ * MapRegion's doc comment). */
 export function getUsStateRegions(): Promise<UsStateRegion[]> {
   return loadMapDataCached().then((d) => d.usStateRegions);
+}
+
+/** Real sea/ocean boundary shapes for the seas/oceans quiz — the "with borders" option (see
+ * MapRegion's doc comment and water-body-regions.json.SOURCE.md). */
+export function getWaterBodyRegions(): Promise<WaterBodyRegion[]> {
+  return loadMapDataCached().then((d) => d.waterBodyRegions);
 }
