@@ -69,6 +69,14 @@ interface WorldMapProps {
    * for the US-states quiz) can pass a gentler scale so the initial view isn't cropped tighter
    * than the thing it's supposed to be showing. */
   focusScale?: number;
+  /** Same initial-view idea as `focusCountryId`, but for a region rather than a single country —
+   * the countries quiz's continent filter (see QuizScreen/geo.ts's getContinentBounds) uses this
+   * to open already zoomed to whichever continent(s) are actually being quizzed, instead of the
+   * whole world every time. A `[x0, y0, x1, y1]` box in MAP_VIEWBOX units; both the center point
+   * AND the zoom level are derived from it (see panZoom's focusOnBounds), unlike
+   * `focusCountryId`/`focusScale`'s fixed scale — how far to zoom naturally depends on how big a
+   * region this is. Independent of `focusCountryId`: a caller uses one or the other, never both. */
+  focusBounds?: [number, number, number, number] | null;
   className?: string;
 }
 
@@ -102,6 +110,7 @@ export function WorldMap({
   showCountryMarkers = true,
   focusCountryId,
   focusScale,
+  focusBounds,
   className,
 }: WorldMapProps) {
   const svgRef = useRef<SVGSVGElement>(null);
@@ -148,7 +157,7 @@ export function WorldMap({
     if (feature) onCountryTap(feature);
   }
 
-  const { transform, reset, focusOn, handlers } = usePanZoom(svgRef, MAP_VIEWBOX, handleTap);
+  const { transform, reset, focusOn, focusOnBounds, handlers } = usePanZoom(svgRef, MAP_VIEWBOX, handleTap);
 
   useEffect(() => {
     if (!focusCountryId) return;
@@ -156,6 +165,12 @@ export function WorldMap({
     if (!feature) return;
     focusOn({ x: feature.centroid[0], y: feature.centroid[1] }, focusScale ?? AUTO_FOCUS_SCALE);
   }, [focusCountryId, focusScale, featureById, focusOn]);
+
+  useEffect(() => {
+    if (!focusBounds) return;
+    focusOnBounds(focusBounds);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusBounds?.join(','), focusOnBounds]);
 
   if (!features) {
     return (

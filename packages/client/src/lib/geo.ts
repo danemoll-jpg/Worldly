@@ -11,7 +11,7 @@
 // loads in parallel with the app shell and the browser can cache it independently.
 import { geoNaturalEarth1, geoPath } from 'd3-geo';
 import { feature } from 'topojson-client';
-import { COUNTRY_BY_ID, US_STATES, UsStateDef, WATER_BODIES } from '@worldly/engine';
+import { Continent, COUNTRY_BY_ID, US_STATES, UsStateDef, WATER_BODIES } from '@worldly/engine';
 
 export interface MapFeature {
   /** Matches a CountryDef.id (see @worldly/engine) when `quizzable`; otherwise a raw id or a
@@ -711,6 +711,33 @@ function loadMapDataCached(): Promise<MapData> {
  * caller (quiz, lookup, mastery map) shares the same promise instead of re-fetching. */
 export function getMapFeatures(): Promise<MapFeature[]> {
   return loadMapDataCached().then((d) => d.features);
+}
+
+/** Bounding box (MAP_VIEWBOX units) of every quizzable country's centroid within the given
+ * continent(s) — used to auto-zoom the countries quiz to just the region actually being quizzed,
+ * same idea `focusCountryId` already gives the US-states quiz for a single country. Centroid-
+ * based rather than each country's own real outer edge (no per-feature bounds are kept around
+ * after load, just centroids), so this slightly underestimates a continent's true visual extent
+ * — WorldMap's focusOnBounds padding is what actually accounts for that, not this function.
+ * Returns null if nothing matched (shouldn't happen for a real Continent, but a caller passing an
+ * empty array — "no continents selected" — shouldn't crash). */
+export async function getContinentBounds(continents: Continent[]): Promise<[number, number, number, number] | null> {
+  const features = await getMapFeatures();
+  const wanted = new Set(continents);
+  let x0 = Infinity;
+  let y0 = Infinity;
+  let x1 = -Infinity;
+  let y1 = -Infinity;
+  for (const f of features) {
+    if (!f.quizzable) continue;
+    const country = COUNTRY_BY_ID[f.id];
+    if (!country || !wanted.has(country.continent)) continue;
+    x0 = Math.min(x0, f.centroid[0]);
+    y0 = Math.min(y0, f.centroid[1]);
+    x1 = Math.max(x1, f.centroid[0]);
+    y1 = Math.max(y1, f.centroid[1]);
+  }
+  return x0 === Infinity ? null : [x0, y0, x1, y1];
 }
 
 /** The small zoomed-in cluster boxes (see INSET_GROUPS) — shares the same cached load as

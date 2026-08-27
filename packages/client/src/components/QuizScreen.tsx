@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Answer, Continent, CONTINENTS, CountryDef, COUNTRY_BY_ID, QuizAnswerResult, QuizSessionState } from '@worldly/engine';
 import { ConfirmDialog } from './ConfirmDialog';
 import { countryFlagSrc, promptFor } from '../lib/format';
-import { MapFeature } from '../lib/geo';
+import { getContinentBounds, MapFeature } from '../lib/geo';
 import { pickChoices } from '../lib/multipleChoice';
 import { WorldMap } from './WorldMap';
 
@@ -71,7 +71,29 @@ export function QuizScreen({ session, onAnswer, onSkip, onQuit, onRestart }: Qui
   const current = session.current;
   const totalInSession = session.pool.length;
   const questionNumber = session.askedIds.length + (current ? 1 : 0);
-  const { mode, category, multipleChoiceDifficulty } = session.config;
+  const { mode, category, multipleChoiceDifficulty, continents } = session.config;
+
+  // Auto-zoom to whichever continent(s) are actually being quizzed — same idea as
+  // UsStatesQuizScreen's focusCountryId, just region-shaped instead of a single country. 'all'
+  // continents stays at the default whole-world view (null focusBounds is a no-op for WorldMap,
+  // same as focusCountryId={null}). Computed here rather than inline in the WorldMap prop below
+  // since getContinentBounds is async (map data loads once, then is cached).
+  const [continentFocusBounds, setContinentFocusBounds] = useState<[number, number, number, number] | null>(null);
+  const continentsKey = continents === 'all' ? 'all' : continents.join(',');
+  useEffect(() => {
+    if (continents === 'all') {
+      setContinentFocusBounds(null);
+      return;
+    }
+    let cancelled = false;
+    getContinentBounds(continents).then((bounds) => {
+      if (!cancelled) setContinentFocusBounds(bounds);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [continentsKey]);
   const prompt = current ? promptFor(category, current.country) : null;
   // Recomputed only when the question actually changes, not on every render (e.g. the feedback
   // flash) — otherwise the 4 buttons would visibly reshuffle themselves right after answering.
@@ -242,7 +264,13 @@ export function QuizScreen({ session, onAnswer, onSkip, onQuit, onRestart }: Qui
         fillFor={fillFor}
         flagFor={flagFor}
         onCountryTap={handleMapTap}
-        focusCountryId={revealsLocationOnMap ? (current?.country.id ?? null) : null}
+        // A continent filter's own wide-but-still-comfortable focusBounds view (below) already
+        // keeps every country in play visible and legible — re-focusing tightly on just the
+        // current one every question (this mode's ordinary behavior with no filter active) would
+        // fight it, snapping back and forth between two different zoom levels each question
+        // instead of staying settled on the continent(s) actually being quizzed.
+        focusCountryId={revealsLocationOnMap && continents === 'all' ? (current?.country.id ?? null) : null}
+        focusBounds={continentFocusBounds}
       />
 
       {mode === 'typeIt' && current && (

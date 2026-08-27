@@ -186,10 +186,27 @@ export function usePanZoom(
     [viewBox],
   );
 
+  /** Same idea as focusOn above, but derives BOTH the center point and the scale from a bounding
+   * box (viewBox units) instead of taking a fixed scale — used for "zoom to this continent" (see
+   * WorldMap's focusBounds), where how far to zoom depends on which continent(s) were picked
+   * rather than always being one constant scale the way a single-country focus is. `padding`
+   * (a fraction of the fitted size, on top of the box itself) keeps the region from touching the
+   * very edge of the viewport. */
+  const focusOnBounds = useCallback(
+    ([x0, y0, x1, y1]: [number, number, number, number], padding = 0.2) => {
+      const width = Math.max(1, x1 - x0);
+      const height = Math.max(1, y1 - y0);
+      const scale = Math.min(viewBox.width / (width * (1 + padding)), viewBox.height / (height * (1 + padding)));
+      focusOn({ x: (x0 + x1) / 2, y: (y0 + y1) / 2 }, scale);
+    },
+    [viewBox, focusOn],
+  );
+
   return {
     transform,
     reset,
     focusOn,
+    focusOnBounds,
     handlers: { onPointerDown, onPointerMove, onPointerUp, onPointerCancel: onPointerUp, onWheel },
   };
 }
