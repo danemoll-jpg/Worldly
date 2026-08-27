@@ -16,6 +16,19 @@ _(nothing open right now — see Done below for what's shipped)_
 
 ## Done
 
+- **Countries quiz auto-zooms to the selected continent(s) — shipped.** User request: "if the
+  user chooses to test on a continent, it would be nice to focus in on the continent
+  automatically like we did for the american quiz." WorldMap gained `focusBounds` (a
+  `[x0,y0,x1,y1]` box that derives both the center point AND the zoom level, unlike
+  `focusCountryId`'s fixed scale — how far to zoom depends on how big the region is);
+  `geo.ts`'s new `getContinentBounds()` computes it from every quizzable country's centroid in
+  the selected continent(s). 'all' continents keeps the whole-world view. Found and fixed a real
+  conflict along the way: typeIt/multipleChoice+country/continent modes already re-focus tightly
+  on each question's own country every question — with a continent filter active, that was
+  overriding the continent-wide view after question 1. Fixed by only using the per-question
+  focus when no continent filter is active. Verified via live screenshots (South America,
+  Europe, a combined Europe+Asia selection, and the typeIt conflict resolved). Commit `088d2b8`.
+
 - **Rhode Island (and every small US state/water body) too small to tap — fixed.** User report:
   "rhode island is too small to click on." Verified directly — RI's real shape is only ~10x14px
   at the states quiz's normal zoom, and a miss of as little as 4-8px already fell through to
