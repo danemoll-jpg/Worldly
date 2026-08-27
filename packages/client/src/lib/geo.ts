@@ -91,6 +91,19 @@ const MAX_TAP_RADIUS = 12;
  * never exactly touch (avoids a razor's-edge boundary where the two are indistinguishable). */
 const TAP_RADIUS_MARGIN = 0.5;
 
+/** Invisible tap-padding radius for every region (US state or water body — see
+ * MapRegion.tapRadius), in the same MAP_VIEWBOX units / counter-scaling convention as
+ * MIN/MAX_TAP_RADIUS above. Deliberately flat, not nearest-neighbor-adaptive the way that pair
+ * is: a tiny-country marker dot IS the only hit target in its area, so neighbor-overlap has to be
+ * actively avoided (see tapRadiusFor). A region's own real, accurately-shaped `<path>` is drawn
+ * on TOP of this invisible circle instead (see WorldMap.tsx), so any tap landing inside a
+ * neighboring region's actual shape still resolves to that neighbor correctly even where the two
+ * circles geometrically overlap — the circle only ever gets exposed for a tap that missed every
+ * real shape nearby. That asymmetry makes a single generous constant safe even for states packed
+ * as tightly as New England's. Reported by the user as "Rhode Island is too small to click on" —
+ * its real on-screen shape at a typical zoom is well under this circle's diameter. */
+const REGION_TAP_RADIUS = 14;
+
 /** Same idea as MIN/MAX_TAP_RADIUS above, but for inset dots (Europe microstates, Caribbean) —
  * a totally different, much smaller coordinate space (each inset's own small viewBox), so the
  * main map's constants don't transfer. Without this, the visible dot itself (r=4 with real
@@ -406,14 +419,27 @@ function buildInset(group: (typeof INSET_GROUPS)[number], geojson: any): Inset {
  * not a deliberate final call against them, and the marker-point rendering this file and
  * WorldMap.tsx used to also support was removed once both had real shapes to use instead. Same
  * shape as MapFeature's core fields (id/name/path/centroid), but deliberately not reusing
- * MapFeature itself: no isTiny/tapRadius/insetGroupId concept applies to either of these — every
- * region is comfortably taggable as its own real shape at the zoom levels its quiz actually
- * uses. */
+ * MapFeature itself: no isTiny/insetGroupId concept applies to either of these — every region is
+ * comfortably identifiable as its own real shape at the zoom levels its quiz actually uses.
+ * `tapRadius` DOES apply though (reported by the user: "Rhode Island is too small to click on")
+ * — a real state/water-body shape can still be too small on screen to tap accurately even though
+ * it's plenty identifiable to look at, the same problem MapFeature.tapRadius solves for tiny
+ * countries. See regionTapRadiusFor below. */
 export interface MapRegion {
   id: string;
   name: string;
   path: string;
   centroid: [number, number];
+  /** Constant-screen-size (counter-scaled the same way MapFeature.tapRadius is) invisible padding
+   * around a region's real shape, in MAP_VIEWBOX units — see regionTapRadiusFor. Rendered UNDER
+   * the real, accurately-shaped `<path>` in WorldMap.tsx, so it only ever catches a tap that
+   * missed every actual region shape nearby; a tap that lands within a NEIGHBORING region's real
+   * (larger, on-top) shape still resolves to that neighbor correctly, even where the two
+   * invisible circles geometrically overlap. That asymmetry (real shape always wins; the circle
+   * is only a fallback) is why this is safe to size generously even for states packed as tightly
+   * as New England's, unlike the tiny-country markers this pattern is borrowed from, where the
+   * invisible circle IS the only hit target and neighbor-overlap has to be avoided outright. */
+  tapRadius: number;
 }
 
 /** Alias of MapRegion, kept so US-states-specific code reads clearly — every US state region IS
@@ -557,7 +583,7 @@ async function loadUsStateRegions(pathGenerator: ReturnType<typeof geoPath>): Pr
     const { path, primaryBounds } = projectFeature(f, pathGenerator);
     if (!path || !primaryBounds) continue;
     const centroid: [number, number] = [(primaryBounds[0] + primaryBounds[2]) / 2, (primaryBounds[1] + primaryBounds[3]) / 2];
-    regions.push({ id, name: f.properties.name as string, path, centroid });
+    regions.push({ id, name: f.properties.name as string, path, centroid, tapRadius: REGION_TAP_RADIUS });
   }
   return regions;
 }
@@ -671,7 +697,7 @@ async function loadWaterBodyRegions(
     if (!path) continue;
     const centroidPoint = projection([body.lon, body.lat]);
     if (!centroidPoint) continue;
-    regions.push({ id: body.id, name: body.name, path, centroid: [centroidPoint[0], centroidPoint[1]] });
+    regions.push({ id: body.id, name: body.name, path, centroid: [centroidPoint[0], centroidPoint[1]], tapRadius: REGION_TAP_RADIUS });
   }
   return regions;
 }

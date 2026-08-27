@@ -263,6 +263,32 @@ export function WorldMap({
               className="world-map__region"
             />
           ))}
+          {/* Invisible, constant-screen-size tap padding for every region (see
+              MapRegion.tapRadius's doc comment) — drawn AFTER (so: on top of, in z-order) every
+              region's real shape above, deliberately: real, non-overlapping adjacent polygons
+              (Rhode Island sharing a border with Massachusetts/Connecticut) have no ambiguous
+              overlap for z-order to resolve on their own, so putting this UNDER the real shapes
+              would do nothing for a near-miss that lands squarely inside a neighbor's actual
+              territory — verified directly (a tap a few px north of Rhode Island's own shape
+              resolved to Massachusetts either way). On top, it intentionally claims a small
+              sliver of a tiny region's larger neighbors right at their shared border — the same
+              "give the hard-to-hit one a deliberate edge" trade the tiny-country markers already
+              make, just without a visible dot this time since a region's real shape already
+              carries all the visual weight. Harmless for an ordinary interior tap (a big state's
+              own circle sits well inside its own territory, nowhere near any neighbor) and
+              affects a region's boundary only within this constant, modest screen radius, not
+              its whole shape. Counter-scaled the same way the tiny-country markers are, so this
+              stays the same physical size on screen at any zoom level. */}
+          {regions?.map((region) => (
+            <circle
+              key={`region-tap-${region.id}`}
+              data-region-id={region.id}
+              transform={`translate(${region.centroid[0]} ${region.centroid[1]}) scale(${1 / transform.scale})`}
+              r={region.tapRadius}
+              fill="transparent"
+              pointerEvents="all"
+            />
+          ))}
           {regions?.map((region) => {
             const image = regionImageFor?.(region);
             if (!image) return null;
