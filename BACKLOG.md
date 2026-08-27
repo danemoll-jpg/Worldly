@@ -16,6 +16,18 @@ _(nothing open right now — see Done below for what's shipped)_
 
 ## Done
 
+- **Rhode Island (and every small US state/water body) too small to tap — fixed.** User report:
+  "rhode island is too small to click on." Verified directly — RI's real shape is only ~10x14px
+  at the states quiz's normal zoom, and a miss of as little as 4-8px already fell through to
+  Connecticut or Massachusetts. Gave every region (not just tiny countries, which already had
+  this) a constant-screen-size invisible tap-padding circle at its centroid, rendered ON TOP of
+  every region's real shape (not underneath, unlike the tiny-country markers' version — real,
+  non-overlapping adjacent polygons have no z-order ambiguity for an underneath circle to
+  resolve, so it has to actually intercept a near-miss that lands inside a neighbor's real
+  territory). Verified RI's real hit margin went from 3-7px to ~17-18px in every direction, and
+  that a genuine "Find: Rhode Island" question now accepts a deliberate 10px near-miss. Commit
+  `eb8c0a9`.
+
 - **US-states auto-zoom, seas/oceans land/water contrast, quiz-picker tabs, and dropping the
   dot/marker fallback — shipped.** A 6-item request in one batch: (1) the US-states quiz now
   opens already zoomed to the US (`focusCountryId`/`focusScale` on WorldMap); (2) the seas/oceans
