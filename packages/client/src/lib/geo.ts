@@ -10,6 +10,7 @@
 // JS — at ~3.6MB it would otherwise dominate the JS bundle's parse time; as a separate fetch it
 // loads in parallel with the app shell and the browser can cache it independently.
 import { geoNaturalEarth1, geoPath } from 'd3-geo';
+import polylabel from 'polylabel';
 import { feature } from 'topojson-client';
 import { Continent, COUNTRY_BY_ID, US_STATES, UsStateDef, WATER_BODIES } from '@worldly/engine';
 
@@ -241,19 +242,25 @@ interface ProjectedFeature {
    * NOT span the full scattered extent, since "how big does the biggest island look" is what
    * actually determines whether it's findable, not how far apart the islands are. */
   primaryBounds: Bounds | null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  /** The SAME largest piece's own raw lon/lat ring coordinates (outer ring + any holes,
+   * GeoJSON-Polygon-shaped) — see labelPointFor below for what this is actually for. */
+  primaryPolygonCoords: any | null;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function projectFeature(f: any, pathGenerator: ReturnType<typeof geoPath>): ProjectedFeature {
   if (f.geometry?.type !== 'MultiPolygon') {
     const d = pathGenerator(f) ?? '';
-    if (!d) return { path: '', primaryBounds: null };
+    if (!d) return { path: '', primaryBounds: null, primaryPolygonCoords: null };
     const b = pathGenerator.bounds(f);
-    return { path: d, primaryBounds: [b[0][0], b[0][1], b[1][0], b[1][1]] };
+    const coords = f.geometry?.type === 'Polygon' ? f.geometry.coordinates : null;
+    return { path: d, primaryBounds: [b[0][0], b[0][1], b[1][0], b[1][1]], primaryPolygonCoords: coords };
   }
 
   const pieces: string[] = [];
-  let primary: { bounds: Bounds; area: number } | null = null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let primary: { bounds: Bounds; area: number; coords: any } | null = null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   for (const polygonCoords of f.geometry.coordinates as any[]) {
     const ringFeature = { type: 'Feature' as const, properties: {}, geometry: { type: 'Polygon' as const, coordinates: polygonCoords } };
@@ -266,10 +273,44 @@ function projectFeature(f: any, pathGenerator: ReturnType<typeof geoPath>): Proj
     pieces.push(d);
     const area = width * height;
     if (!primary || area > primary.area) {
-      primary = { bounds: [bounds[0][0], bounds[0][1], bounds[1][0], bounds[1][1]], area };
+      primary = { bounds: [bounds[0][0], bounds[0][1], bounds[1][0], bounds[1][1]], area, coords: polygonCoords };
     }
   }
-  return { path: pieces.join(' '), primaryBounds: primary?.bounds ?? null };
+  return { path: pieces.join(' '), primaryBounds: primary?.bounds ?? null, primaryPolygonCoords: primary?.coords ?? null };
+}
+
+/** A good, always-actually-inside-the-shape point to stamp a marker/flag at — see this function's
+ * call site (loadMapData's withCentroids) for the two real, reported failures a plain bbox-center
+ * or an area-weighted geometric centroid can both still produce: Russia's mainland is one un-
+ * split polygon whose BOUNDING BOX spans ~80% of the whole map's width (antimeridian wrap), and
+ * Norway/Chile are long, concave/crescent coastal strips whose TRUE geometric center of mass
+ * falls outside their own land entirely (Norway's in Sweden; Chile's in Argentina, across the
+ * Andes — verified directly with a proper containment check, not just eyeballed). `polylabel`
+ * (the same "pole of inaccessibility" algorithm Mapbox uses for map label placement) sidesteps
+ * both: it operates on the polygon's own real ring coordinates, not a bounding box, and always
+ * returns a point strictly inside the shape, as far as possible from every edge — exactly what a
+ * flag stamp or marker dot needs, and a fundamentally better fit for this than any kind of
+ * centroid (area-weighted or not) was ever going to be for a shape this oddly formed. Operates
+ * directly in already-PROJECTED (x, y) space — projecting each ring vertex through the same
+ * `projection` used everywhere else, rather than a lon/lat round-trip — so the result lines up
+ * exactly with how the shape is actually drawn, warped edges included. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function labelPointFor(polygonCoords: any, projection: ReturnType<typeof geoNaturalEarth1>): [number, number] | null {
+  if (!polygonCoords) return null;
+  const projectedRings: [number, number][][] = [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const ring of polygonCoords as any[]) {
+    const projectedRing: [number, number][] = [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    for (const point of ring as any[]) {
+      const p = projection(point);
+      if (p) projectedRing.push([p[0], p[1]]);
+    }
+    if (projectedRing.length >= 3) projectedRings.push(projectedRing);
+  }
+  if (projectedRings.length === 0) return null;
+  const [x, y] = polylabel(projectedRings, 0.5);
+  return Number.isFinite(x) && Number.isFinite(y) ? [x, y] : null;
 }
 
 /** Simple (non-antimeridian-aware) lon/lat bounding box of a single polygon ring's coordinates
@@ -512,24 +553,23 @@ async function loadMapData(): Promise<MapData> {
     quizzable: boolean;
     path: string;
     primaryBounds: Bounds | null;
-    geometricCentroid: [number, number];
+    labelPoint: [number, number] | null;
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const raw: Raw[] = geojson.features.map((f: any) => {
     const rawId = (f.id as string | undefined) || slugify(f.properties.name as string);
     const quizCountry = COUNTRY_BY_ID[rawId];
-    const { path, primaryBounds } = projectFeature(f, pathGenerator);
+    const { path, primaryBounds, primaryPolygonCoords } = projectFeature(f, pathGenerator);
     return {
       id: rawId,
       name: quizCountry ? quizCountry.name : (f.properties.name as string),
       quizzable: !!quizCountry,
       path,
       primaryBounds,
-      // d3-geo's own proper area-weighted geometric centroid of the WHOLE feature (every piece,
-      // not just the "primary" one) — see `centroid`/withCentroids below for why this, not a
-      // bbox average, is what actually gets used to place a marker/flag.
-      geometricCentroid: pathGenerator.centroid(f),
+      // Where a marker/flag actually gets drawn — see labelPointFor's own doc comment for why
+      // this, not any kind of centroid, is what's needed here.
+      labelPoint: labelPointFor(primaryPolygonCoords, projection),
     };
   });
 
@@ -548,26 +588,15 @@ async function loadMapData(): Promise<MapData> {
 
   const withCentroids = raw.map((r) => {
     const groupDimension = maxDimensionById.get(r.id) ?? Infinity;
-    // Where a marker/flag actually gets drawn: d3's real geometric centroid, not a bbox average
-    // of the "primary" (largest) piece. The bbox version breaks down for exactly the shapes this
-    // map is full of — a country whose biggest piece spans the antimeridian (Russia's mainland
-    // runs from ~19°E clear across Siberia to Chukotka past 180°, one un-split polygon piece
-    // ~80% of the WHOLE MAP's width; its bbox center landed near Scandinavia, nowhere close to
-    // Russia itself — reported directly by the user as "Russia's flag appears NE of UK") or a
-    // concave/crescent shape wrapping around another country (Norway's coastal strip wraps
-    // Sweden on three sides; its bbox center landed inside Sweden's own territory instead of
-    // Norway's — also reported directly). d3's centroid integrates the actual rendered path's
-    // area, so it isn't fooled by either case the way a min/max coordinate average is. Falls back
-    // to the bbox center only if a feature somehow yields a non-finite centroid (not observed
-    // across this dataset, but bbox-center is itself a fine fallback for the ordinary compact
-    // shapes where the two methods agree closely anyway).
-    const [gx, gy] = r.geometricCentroid;
+    // Where a marker/flag actually gets drawn — see labelPointFor's own doc comment for why a
+    // "pole of inaccessibility" is what this needs, not a centroid (area-weighted or bbox-based)
+    // of any kind. Falls back to the bbox center only if labelPointFor couldn't produce anything
+    // at all (no primary piece — a feature whose only pieces were antimeridian artifacts, not
+    // observed in practice); bbox-center is a fine fallback for the ordinary compact shapes where
+    // it and the label point agree closely anyway.
     const centroid: [number, number] =
-      Number.isFinite(gx) && Number.isFinite(gy)
-        ? [gx, gy]
-        : r.primaryBounds
-          ? [(r.primaryBounds[0] + r.primaryBounds[2]) / 2, (r.primaryBounds[1] + r.primaryBounds[3]) / 2]
-          : [0, 0];
+      r.labelPoint ??
+      (r.primaryBounds ? [(r.primaryBounds[0] + r.primaryBounds[2]) / 2, (r.primaryBounds[1] + r.primaryBounds[3]) / 2] : [0, 0]);
     const isTiny = r.quizzable && (groupDimension < TINY_PRIMARY_DIMENSION || FORCE_TINY_IDS.has(r.id));
     return { ...r, centroid, isTiny };
   });
