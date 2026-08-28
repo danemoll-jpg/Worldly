@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { getInsets, getMapFeatures, Inset, MAP_VIEWBOX, MapFeature, MapRegion } from '../lib/geo';
+import { getInsets, getMapFeatures, Inset, MAP_VIEWBOX, MapFeature, MapRegion, REGION_TAP_RADIUS_TARGET } from '../lib/geo';
 import { usePanZoom } from '../lib/panZoom';
 
 interface WorldMapProps {
@@ -87,6 +87,64 @@ const INSET_POSITION: Record<string, 'top-left' | 'top-right'> = {
   'caribbean-states': 'top-right',
 };
 
+/** Every invisible tap-padding radius on the main map (MapFeature.tapRadius, MapRegion.tapRadius)
+ * is a fixed number of MAP_VIEWBOX units — which is NOT a fixed number of screen pixels, because
+ * .world-map-wrap's CSS width is responsive (`width: 100%; max-width: min(96vw, 82rem)`), not
+ * fixed. On a phone-width screen the whole map renders considerably narrower than the desktop
+ * width these radii were tuned against, so the same viewBox-unit padding shrinks to noticeably
+ * fewer actual screen pixels — a real, reported problem ("big ass fingers... missed New
+ * Hampshire even though I felt like I clicked right on it"), not just Rhode Island's own
+ * originally-reported issue. REFERENCE_MAP_CSS_WIDTH is roughly what the map actually renders at
+ * on an ordinary desktop window (verified directly — a 1280px browser viewport renders the map
+ * at ~1200 CSS px wide), i.e. the width every tap radius in this file was already tuned/verified
+ * against. useMapScaleFactor (below) grows above 1 only when the map is narrower than that,
+ * scaling every tap radius back up to the SAME physical screen size regardless of device —
+ * desktop is completely unaffected (factor stays exactly 1), a narrow phone gets proportionally
+ * more forgiving padding. */
+const REFERENCE_MAP_CSS_WIDTH = 1200;
+
+/** Tracks the map SVG's own rendered CSS width live (ResizeObserver — covers window resizes,
+ * device rotation, and the initial layout pass alike) and returns the scale factor described
+ * above. Starts at 1 (no correction) until the first measurement lands, same as assuming a
+ * desktop-sized view rather than guessing a phone-sized one by default.
+ *
+ * `svgMounted` exists ONLY to force this effect to re-run once the real `<svg>` element actually
+ * shows up: WorldMap renders a "loading…" placeholder (no `<svg>` at all) until `features` loads,
+ * so `svgRef.current` is still null the first time this effect runs. A ref's OWN identity never
+ * changes across renders, so `svgRef` alone in the dependency array can't detect that — verified
+ * directly, the observer silently never attached to anything, and every tap radius on the whole
+ * map quietly stayed un-scaled on every device, desktop included, without erroring or otherwise
+ * calling attention to it. */
+function useMapScaleFactor(svgRef: React.RefObject<SVGSVGElement>, svgMounted: boolean): number {
+  const [renderedWidth, setRenderedWidth] = useState<number | null>(null);
+
+  useEffect(() => {
+    const el = svgRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect.width;
+      if (width) setRenderedWidth(width);
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [svgRef, svgMounted]);
+
+  return renderedWidth ? Math.max(1, REFERENCE_MAP_CSS_WIDTH / renderedWidth) : 1;
+}
+
+/** Defensive upper bound on a tiny-country marker's scaled tap radius (MapFeature.tapRadius *
+ * useMapScaleFactor) — unlike MapRegion.tapRadius, this ISN'T a real per-pair geometric ceiling
+ * (that would mean redoing tapRadiusFor's MIN/MAX clamp to run at render time instead of load
+ * time, the same fix regions needed), just a flat backstop against the same failure mode. Lower
+ * risk here than it was for regions: any two tiny countries close enough to genuinely conflict
+ * are already pulled into an inset instead of sharing the main map at all (see INSET_GROUPS), so
+ * this should rarely if ever actually bind — it's cheap insurance, not the primary fix. */
+const TINY_MARKER_TAP_RADIUS_HARD_CAP = 35;
+
+/** Same idea as TINY_MARKER_TAP_RADIUS_HARD_CAP, for inset dots — a smaller number since insets
+ * are their own much smaller coordinate space (each inset's own viewBox), not MAP_VIEWBOX. */
+const INSET_TAP_RADIUS_HARD_CAP = 45;
+
 /** How far to zoom in when auto-focusing on a country — moderate on purpose: enough to make a
  * small country legible and unambiguous among its neighbors, but not so far that it crops away
  * the surrounding context that actually helps you place it (which is the whole point here). */
@@ -116,6 +174,7 @@ export function WorldMap({
   const svgRef = useRef<SVGSVGElement>(null);
   const [features, setFeatures] = useState<MapFeature[] | null>(null);
   const [insets, setInsets] = useState<Inset[]>([]);
+  const tapScaleFactor = useMapScaleFactor(svgRef, !!features);
 
   useEffect(() => {
     let cancelled = false;
@@ -237,7 +296,12 @@ export function WorldMap({
                     testing only the visible circle meant a near-miss would fall through to
                     whatever bigger country happens to be underneath instead. pointerEvents="all"
                     makes this catch taps despite having no visible fill. */}
-                <circle data-feature-index={i} r={f.tapRadius} fill="transparent" pointerEvents="all" />
+                <circle
+                  data-feature-index={i}
+                  r={Math.min(f.tapRadius * tapScaleFactor, TINY_MARKER_TAP_RADIUS_HARD_CAP)}
+                  fill="transparent"
+                  pointerEvents="all"
+                />
                 <circle
                   data-feature-index={i}
                   r={5}
@@ -290,16 +354,30 @@ export function WorldMap({
               "give the hard-to-hit one a deliberate edge" trade the tiny-country markers already
               make, just without a visible dot this time since a region's real shape already
               carries all the visual weight. Harmless for an ordinary interior tap (a big state's
-              own circle sits well inside its own territory, nowhere near any neighbor) and
-              affects a region's boundary only within this constant, modest screen radius, not
-              its whole shape. Counter-scaled the same way the tiny-country markers are, so this
-              stays the same physical size on screen at any zoom level. */}
+              own circle sits well inside its own territory, nowhere near any neighbor).
+              `region.tapRadius` is a geometric ceiling in RAW (unzoomed) MAP_VIEWBOX units — a
+              pure fact about how close two regions' centroids are in the underlying geometry,
+              same units projectFeature works in throughout this file. The circle's own radius
+              (`r=`) is counter-scaled to stay a CONSTANT SCREEN size regardless of zoom, though —
+              so comparing the two directly would get more conservative than necessary at a high
+              zoom level for no reason: zooming in (the US-states quiz always does, right from the
+              start) spreads two states' real, on-screen positions further apart in actual screen
+              pixels without changing their raw centroid distance at all, so `* transform.scale`
+              converts the ceiling into the SAME constant-per-zoom units the circle's radius uses,
+              growing the safe ceiling right along with the zoom instead of understating it
+              (confirmed empirically: New Hampshire and Vermont's centroids are only ~1.6 raw
+              units apart on the whole-world map — comfortably far apart once the states quiz's
+              own zoom is accounted for, needlessly tiny without it). min()'d against how big we'd
+              actually LIKE the circle to be on THIS device (REGION_TAP_RADIUS_TARGET, grown by
+              useMapScaleFactor on a narrow phone) — this ceiling is what stops that from growing
+              enough to actually swallow a close neighbor's own centroid, confirmed as a real
+              failure during testing before it was added. */}
           {regions?.map((region) => (
             <circle
               key={`region-tap-${region.id}`}
               data-region-id={region.id}
               transform={`translate(${region.centroid[0]} ${region.centroid[1]}) scale(${1 / transform.scale})`}
-              r={region.tapRadius}
+              r={Math.min(region.tapRadius * transform.scale, REGION_TAP_RADIUS_TARGET * tapScaleFactor)}
               fill="transparent"
               pointerEvents="all"
             />
@@ -356,11 +434,16 @@ export function WorldMap({
                   <g key={insetFeature.id}>
                     {/* Invisible, more forgiving tap target under the visible dot — same idea as
                         the main map's tiny-country markers (see MapFeature.tapRadius): the
-                        visible dot alone is too small a target to hit reliably on a touchscreen. */}
+                        visible dot alone is too small a target to hit reliably on a touchscreen.
+                        Reuses the main map's own tapScaleFactor as an approximation — an inset
+                        box is its own separate coordinate space (a fixed CSS %/max-width of the
+                        map wrap, not MAP_VIEWBOX), but it shrinks right along with the main map
+                        on a narrower screen, so the same correction direction still helps here
+                        rather than leaving these completely unscaled. */}
                     <circle
                       cx={insetFeature.cx}
                       cy={insetFeature.cy}
-                      r={insetFeature.tapRadius}
+                      r={Math.min(insetFeature.tapRadius * tapScaleFactor, INSET_TAP_RADIUS_HARD_CAP)}
                       fill="transparent"
                       onClick={() => onCountryTap?.(mainFeature)}
                     />

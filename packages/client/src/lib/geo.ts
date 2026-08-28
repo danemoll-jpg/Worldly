@@ -84,25 +84,54 @@ const FORCE_TINY_IDS = new Set(['275', '096']); // Palestine, Brunei
  * than the marker's own visible-dot radius (see WorldMap.tsx) — a hit radius smaller than the
  * dot itself would add nothing, since the dot already sits on top and catches those taps. MAX
  * keeps an isolated tiny country (nothing else tiny anywhere nearby) from grabbing an
- * unreasonably large chunk of the map. */
-const MIN_TAP_RADIUS = 7;
-const MAX_TAP_RADIUS = 12;
+ * unreasonably large chunk of the map. Bumped up from 7/12 after general feedback that the whole
+ * app could stand to be more forgiving of an imprecise tap — see REGION_TAP_RADIUS's own note on
+ * the SAME feedback, plus WorldMap.tsx's useMapScaleFactor for the separate, device-width part of
+ * that fix (these two numbers are what a normal desktop-width map already gets; a narrower phone
+ * screen scales them up further from there). */
+const MIN_TAP_RADIUS = 9;
+const MAX_TAP_RADIUS = 15;
 /** Small gap kept between two neighboring tap circles at their half-distance split, so they
  * never exactly touch (avoids a razor's-edge boundary where the two are indistinguishable). */
 const TAP_RADIUS_MARGIN = 0.5;
 
-/** Invisible tap-padding radius for every region (US state or water body — see
- * MapRegion.tapRadius), in the same MAP_VIEWBOX units / counter-scaling convention as
- * MIN/MAX_TAP_RADIUS above. Deliberately flat, not nearest-neighbor-adaptive the way that pair
- * is: a tiny-country marker dot IS the only hit target in its area, so neighbor-overlap has to be
- * actively avoided (see tapRadiusFor). A region's own real, accurately-shaped `<path>` is drawn
- * on TOP of this invisible circle instead (see WorldMap.tsx), so any tap landing inside a
- * neighboring region's actual shape still resolves to that neighbor correctly even where the two
- * circles geometrically overlap — the circle only ever gets exposed for a tap that missed every
- * real shape nearby. That asymmetry makes a single generous constant safe even for states packed
- * as tightly as New England's. Reported by the user as "Rhode Island is too small to click on" —
- * its real on-screen shape at a typical zoom is well under this circle's diameter. */
-const REGION_TAP_RADIUS = 14;
+/** How big a region's invisible tap-padding circle (MapRegion.tapRadius) would LIKE to be on an
+ * ordinary desktop-width map — see WorldMap.tsx's useMapScaleFactor, which multiplies this by a
+ * live device-width correction (bigger again on a narrow phone). Reported by the user as "Rhode
+ * Island is too small to click on," then more broadly as "the game needs some forgiveness in
+ * general… missed New Hampshire even though I feel like I clicked right on it." */
+export const REGION_TAP_RADIUS_TARGET = 20;
+/** Small gap kept between two neighboring regions' tap circles at their half-distance split —
+ * same reasoning as TAP_RADIUS_MARGIN above, just for regions. Deliberately much smaller than
+ * that pair's own margin: whole-US-map raw distances between adjacent SMALL states can be well
+ * under 2 units (New Hampshire/Vermont's centroids are only ~1.6 apart) — a margin anywhere near
+ * TAP_RADIUS_MARGIN's 0.5 would eat the entire gap for pairs like that on its own. */
+const REGION_TAP_RADIUS_MARGIN = 0.15;
+
+/** The geometric half of MapRegion.tapRadius (see its doc comment) — half the real distance to
+ * this region's nearest OTHER region in the same list (US states compared only to other US
+ * states, water bodies only to other water bodies; comparing across universes wouldn't mean
+ * anything), minus a small margin. Floored at 0, deliberately NOT at some small positive
+ * "minimum floor" value: a floor that ignores how close the actual neighbor is would defeat the
+ * entire point of this function — verified directly, an earlier version floored at a flat 3,
+ * which (once WorldMap.tsx's `* transform.scale` correctly scaled it up for the states quiz's
+ * already-zoomed-in view) gave New Hampshire AND Vermont the exact same radius, large enough for
+ * each to reach clean past the other's own centroid, so New Hampshire's own dead-center click
+ * resolved to Vermont. A region with an extremely close neighbor (the New England cluster is the
+ * most extreme case on this map) genuinely gets little to no extra padding beyond its own real
+ * shape from this function — earning it that padding back would need a smarter, more expensive
+ * distance-to-the-neighbor's-actual-outline measurement instead of centroid-to-centroid, not
+ * attempted here. */
+function regionTapRadiusCeiling(id: string, centroid: [number, number], all: { id: string; centroid: [number, number] }[]): number {
+  let nearestDistance = Infinity;
+  for (const other of all) {
+    if (other.id === id) continue;
+    const dx = other.centroid[0] - centroid[0];
+    const dy = other.centroid[1] - centroid[1];
+    nearestDistance = Math.min(nearestDistance, Math.hypot(dx, dy));
+  }
+  return Math.max(0, nearestDistance / 2 - REGION_TAP_RADIUS_MARGIN);
+}
 
 /** Same idea as MIN/MAX_TAP_RADIUS above, but for inset dots (Europe microstates, Caribbean) —
  * a totally different, much smaller coordinate space (each inset's own small viewBox), so the
@@ -110,9 +139,10 @@ const REGION_TAP_RADIUS = 14;
  * surrounding geography drawn, r=7 without) WAS the entire tap target — no padding at all,
  * unlike every tiny country on the main map, which already gets a forgiving invisible tap
  * radius layered under its visible dot. On screen that r=4 dot works out to roughly an 8-9px
- * diameter target, well under any real touch-target size. */
-const INSET_MIN_TAP_RADIUS = 9;
-const INSET_MAX_TAP_RADIUS = 16;
+ * diameter target, well under any real touch-target size. Bumped up alongside MIN/MAX_TAP_RADIUS
+ * after general "needs more forgiveness" feedback — see that pair's own comment. */
+const INSET_MIN_TAP_RADIUS = 11;
+const INSET_MAX_TAP_RADIUS = 18;
 const INSET_TAP_RADIUS_MARGIN = 1;
 
 /** Clusters of tiny countries close enough together that no marker radius can tell taps apart
@@ -424,21 +454,29 @@ function buildInset(group: (typeof INSET_GROUPS)[number], geojson: any): Inset {
  * `tapRadius` DOES apply though (reported by the user: "Rhode Island is too small to click on")
  * — a real state/water-body shape can still be too small on screen to tap accurately even though
  * it's plenty identifiable to look at, the same problem MapFeature.tapRadius solves for tiny
- * countries. See regionTapRadiusFor below. */
+ * countries. See regionTapRadiusCeiling below. */
 export interface MapRegion {
   id: string;
   name: string;
   path: string;
   centroid: [number, number];
-  /** Constant-screen-size (counter-scaled the same way MapFeature.tapRadius is) invisible padding
-   * around a region's real shape, in MAP_VIEWBOX units — see regionTapRadiusFor. Rendered UNDER
-   * the real, accurately-shaped `<path>` in WorldMap.tsx, so it only ever catches a tap that
-   * missed every actual region shape nearby; a tap that lands within a NEIGHBORING region's real
-   * (larger, on-top) shape still resolves to that neighbor correctly, even where the two
-   * invisible circles geometrically overlap. That asymmetry (real shape always wins; the circle
-   * is only a fallback) is why this is safe to size generously even for states packed as tightly
-   * as New England's, unlike the tiny-country markers this pattern is borrowed from, where the
-   * invisible circle IS the only hit target and neighbor-overlap has to be avoided outright. */
+  /** The MOST this region's invisible tap-padding circle is allowed to be, in raw MAP_VIEWBOX
+   * units — half the real geometric distance to its nearest other region's centroid (minus a
+   * small margin), same nearest-neighbor idea as MapFeature.tapRadius's tapRadiusFor. NOT the
+   * radius actually drawn: WorldMap.tsx renders
+   * `min(region.tapRadius, REGION_TAP_RADIUS_TARGET * the-live-device-scale-factor)` — this field
+   * is only the ceiling half of that, a pure fact about the map's geometry that doesn't change
+   * with the device, while the other half (how big we'd LIKE the circle to be) does. Needing both
+   * halves, rather than just multiplying a single precomputed number by the device factor, is
+   * exactly what a Rhode-Island-sized state packed against equally-small neighbors needs: a
+   * naive multiply once blew way past this same ceiling on a narrow phone (verified directly —
+   * New Hampshire's own circle grew large enough to swallow Vermont's whole share of the border,
+   * so even NEW HAMPSHIRE's own centroid resolved to Vermont), while a well-separated region (most
+   * water bodies, most western states) never bumps into its own ceiling at all and gets the full
+   * device-scaled benefit. Rendered UNDER the real, accurately-shaped `<path>` in WorldMap.tsx
+   * regardless, so it only ever catches a tap that missed every actual region shape nearby — a tap
+   * that lands within a neighboring region's real (larger, on-top) shape still resolves to that
+   * neighbor correctly even where the two invisible circles geometrically overlap. */
   tapRadius: number;
 }
 
@@ -583,8 +621,11 @@ async function loadUsStateRegions(pathGenerator: ReturnType<typeof geoPath>): Pr
     const { path, primaryBounds } = projectFeature(f, pathGenerator);
     if (!path || !primaryBounds) continue;
     const centroid: [number, number] = [(primaryBounds[0] + primaryBounds[2]) / 2, (primaryBounds[1] + primaryBounds[3]) / 2];
-    regions.push({ id, name: f.properties.name as string, path, centroid, tapRadius: REGION_TAP_RADIUS });
+    regions.push({ id, name: f.properties.name as string, path, centroid, tapRadius: 0 }); // set below
   }
+  // Second pass: each state's tap-radius ceiling depends on every OTHER state's centroid, so it
+  // can only be computed once the full list exists (see regionTapRadiusCeiling).
+  for (const region of regions) region.tapRadius = regionTapRadiusCeiling(region.id, region.centroid, regions);
   return regions;
 }
 
@@ -697,8 +738,10 @@ async function loadWaterBodyRegions(
     if (!path) continue;
     const centroidPoint = projection([body.lon, body.lat]);
     if (!centroidPoint) continue;
-    regions.push({ id: body.id, name: body.name, path, centroid: [centroidPoint[0], centroidPoint[1]], tapRadius: REGION_TAP_RADIUS });
+    regions.push({ id: body.id, name: body.name, path, centroid: [centroidPoint[0], centroidPoint[1]], tapRadius: 0 }); // set below
   }
+  // Second pass — see loadUsStateRegions's identical comment.
+  for (const region of regions) region.tapRadius = regionTapRadiusCeiling(region.id, region.centroid, regions);
   return regions;
 }
 
