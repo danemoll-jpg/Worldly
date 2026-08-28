@@ -3,6 +3,7 @@ import { GenericAnswer, masteryLevel, QuizAnswerResult, StatsMap, US_STATE_BY_ID
 import { getUsStateRegions, MapRegion } from '../lib/geo';
 import { GenericQuizController } from '../hooks/useGenericQuiz';
 import { isBetterSession } from '../lib/storage';
+import { ConfirmDialog } from './ConfirmDialog';
 import { WorldMap } from './WorldMap';
 
 interface UsStatesQuizScreenProps {
@@ -78,6 +79,7 @@ export function UsStatesQuizScreen({ quiz, stats, onViewRecords, onBack, onBackT
   const [pendingMode, setPendingMode] = useState<'findIt' | 'typeIt'>('findIt');
   const [pendingScope, setPendingScope] = useState<'all' | 'weakSpots'>('all');
   const [category, setCategory] = useState<Category>('name');
+  const [confirmingRestart, setConfirmingRestart] = useState(false);
   const seenResultCount = useRef(0);
 
   const session = quiz.session;
@@ -369,16 +371,21 @@ export function UsStatesQuizScreen({ quiz, stats, onViewRecords, onBack, onBackT
   return (
     <div className="app">
       <div className="quiz-header">
-        <button
-          type="button"
-          className="back-link"
-          onClick={() => {
-            quiz.goHome();
-            onBack();
-          }}
-        >
-          ‹ Quit quiz
-        </button>
+        <div className="quiz-header__left">
+          <button
+            type="button"
+            className="back-link"
+            onClick={() => {
+              quiz.goHome();
+              onBack();
+            }}
+          >
+            ‹ Quit quiz
+          </button>
+          <button type="button" className="quiz-restart" onClick={() => setConfirmingRestart(true)}>
+            ↺ Restart
+          </button>
+        </div>
         <span className="quiz-header__progress">
           {Math.min(questionNumber, totalInSession)} / {totalInSession}
         </span>
@@ -437,6 +444,23 @@ export function UsStatesQuizScreen({ quiz, stats, onViewRecords, onBack, onBackT
             Submit
           </button>
         </form>
+      )}
+
+      {confirmingRestart && (
+        <ConfirmDialog
+          title="Restart this quiz?"
+          message={
+            session.results.length > 0
+              ? `You've answered ${session.results.length} of ${totalInSession} so far — restarting throws that away and starts the same setup over from question 1.`
+              : 'Start this setup over from question 1?'
+          }
+          confirmLabel="Restart"
+          onConfirm={() => {
+            setConfirmingRestart(false);
+            quiz.playAgain();
+          }}
+          onCancel={() => setConfirmingRestart(false)}
+        />
       )}
     </div>
   );
