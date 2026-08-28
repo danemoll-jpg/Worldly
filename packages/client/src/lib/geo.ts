@@ -224,14 +224,32 @@ function slugify(name: string): string {
 // d3-geo's adaptive resampling occasionally mis-projects one ring of a MultiPolygon that's
 // made of many very small, tightly-clustered points (real-world example: Maldives — ~176 tiny
 // atoll rings, several only a few hundredths of a degree apart) into a spurious shape that
-// covers almost the entire map, painting over every other country underneath it. No real
-// single ring legitimately spans this much of the map — even Russia's mainland, the widest
-// single landmass on Earth, covers well under half the map's width, and nothing spans anywhere
-// near full height (that would mean pole-to-pole). Filtering per-ring by absolute size, rather
-// than trusting the whole feature's computed bounds, keeps every legitimate country (including
-// very large ones) intact while dropping only this specific class of degenerate artifact.
+// covers almost the entire map, painting over every other country underneath it. Filtering
+// per-ring by absolute size, rather than trusting the whole feature's computed bounds, keeps
+// every legitimate country (including very large ones) intact while dropping only this specific
+// class of degenerate artifact — this pair alone catches a ring implausibly large in BOTH
+// dimensions at once (nothing legitimate is ever that — not even Russia's mainland, whose real
+// width genuinely does exceed this WIDTH threshold on its own, verified directly, but whose
+// height comes nowhere close to also clearing the HEIGHT one; a ring failing both at once, the
+// way the Maldives artifact does, isn't real geography).
 const MAX_PLAUSIBLE_RING_WIDTH = MAP_VIEWBOX.width * 0.75;
 const MAX_PLAUSIBLE_RING_HEIGHT = MAP_VIEWBOX.height * 0.7;
+
+// A second, different signature of the SAME class of resampling artifact: wide-but-not-tall (so
+// the pair above lets it through), yet absurdly elongated — real Fiji example, found directly:
+// one ring 948.3 units wide but only 2.7 tall (aspect ratio ~357:1), versus every genuinely
+// elongated real primary piece in the whole quizzable dataset (Russia's own mainland included,
+// ~7.5:1) staying comfortably under 20:1 — verified by scanning all 197 quizzable countries'
+// current primary-piece selections, Fiji was the only one anywhere near this threshold. Because
+// Fiji's own real islands are small, this degenerate sliver's bounding-box AREA can still beat
+// out every one of Fiji's actual (tiny) islands for "primary piece by area" — which is what
+// happened: the sliver got picked as primary, and labelPointFor (see below) dutifully found a
+// point deep in the middle of a fake shape spanning most of the map, nowhere near Fiji at all
+// (reported directly by the user: "Fiji... shows up west of Angola"). Only applied to PRIMARY
+// PIECE ELIGIBILITY, not to whether a piece renders at all — an actually-degenerate sliver
+// rendering as an imperceptible line is harmless; picking it as "the shape that represents this
+// country" for centroid/label/sizing purposes is not.
+const MAX_PLAUSIBLE_PRIMARY_ASPECT_RATIO = 20;
 
 type Bounds = [number, number, number, number]; // [minX, minY, maxX, maxY]
 
@@ -272,7 +290,9 @@ function projectFeature(f: any, pathGenerator: ReturnType<typeof geoPath>): Proj
     if (!d) continue;
     pieces.push(d);
     const area = width * height;
-    if (!primary || area > primary.area) {
+    const aspectRatio = Math.max(width, height) / Math.max(0.001, Math.min(width, height));
+    const eligibleForPrimary = aspectRatio <= MAX_PLAUSIBLE_PRIMARY_ASPECT_RATIO;
+    if (eligibleForPrimary && (!primary || area > primary.area)) {
       primary = { bounds: [bounds[0][0], bounds[0][1], bounds[1][0], bounds[1][1]], area, coords: polygonCoords };
     }
   }
