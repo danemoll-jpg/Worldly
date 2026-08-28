@@ -16,6 +16,23 @@ _(nothing open right now — see Done below for what's shipped)_
 
 ## Done
 
+- **Mastery map: tap a shape to see its name/level/history — shipped.** User request: "on the
+  mastery screen, can we click on the area to see the country (or the lake, sea or state)?" A
+  detail card (reusing the browse/atlas screen's own styling) appears below the map on tap,
+  showing name, mastery level, flag where one exists (countries/US states), and — once actually
+  quizzed at least once — real seen/missed counts. Works across all three universe tabs; clears
+  on tab switch. Verified live, including a full quiz session run to completion to check the
+  "already quizzed" state (stats only persist when a session finishes, not per-question).
+  Commit `aeb747d`.
+
+- **Solomon Islands and Vanuatu too small to tap reliably — fixed.** User: "I click on them but
+  have to click around a little before they are recognized." Neither was actually tiny by size
+  (both over the 2.2-unit threshold), but both are scattered archipelagos — 48 and 27 separate
+  island pieces — spread across a bounding box much bigger than the real clickable land, the
+  same "bbox overstates the shape" problem Brunei had. Added both to the existing
+  `FORCE_TINY_IDS` override list after confirming they're a safe ~28.6 units from any other
+  tiny-marker country (no overlap risk). Commit `58a669c`.
+
 - **Fiji's flag showing west of Angola — fixed.** User report, noticed on the deployed (pre-fix)
   app. A different root cause than the Russia/Norway/Chile bug even though it looks like the
   same family: Fiji's raw data includes a degenerate d3-geo resampling artifact ring (948.3
