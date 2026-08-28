@@ -16,6 +16,20 @@ _(nothing open right now — see Done below for what's shipped)_
 
 ## Done
 
+- **Russia's flag showing near the UK, Norway's flag showing in Sweden — fixed.** User report,
+  both from directly noticing wrong flag placement on the map. Root cause: every country's
+  marker/flag was placed at the bounding-box CENTER of its largest polygon piece, which breaks
+  down for two different real shapes — Russia's mainland is one un-split piece spanning ~80% of
+  the whole map's width (19°E across Siberia to past 180°E), whose bbox center lands near
+  Scandinavia; Norway's coastal strip wraps around Sweden on three sides, so its bbox center
+  falls inside Sweden's own territory instead of Norway's. Switched to d3-geo's proper area-
+  weighted geometric centroid (computed over the WHOLE feature, not just one piece) — verified
+  across all 255 features with no invalid results, so the old bbox-center is now only a
+  defensive fallback. Verified via live screenshots: Russia's flag now lands well inside Russia;
+  Norway's and Sweden's are clearly separated on their own countries; a broad sweep of other
+  tricky shapes (Chile, Indonesia, Philippines, Canada, the Balkans, Vietnam, Malaysia, Fiji, New
+  Zealand, Denmark) all correct; tiny-country dot markers and insets unaffected. Commit `53e24b2`.
+
 - **General tap forgiveness, device-width-aware — shipped, with a known remaining limit.** User
   report: "the game needs some forgiveness in general. I got big ass fingers and even just
   missed New Hampshire even though I feel like I clicked right on it." Root cause: every
