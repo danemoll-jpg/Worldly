@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import { dailyDateKey } from '@worldly/engine';
 import { GAME_HUB_URL } from '../lib/hub';
 import { DailyChallengeState } from '../lib/storage';
+import { isSoundEnabled, setSoundEnabled } from '../lib/sound';
 import { SyncStatus } from '../hooks/useQuiz';
 
 interface HomeScreenProps {
@@ -28,12 +30,27 @@ export function HomeScreen({
 }: HomeScreenProps) {
   const synced = syncStatus === 'synced' && !!syncCode;
   const hasPlayedToday = dailyChallenge.lastPlayedDateKey === dailyDateKey();
+  const [soundOn, setSoundOn] = useState(isSoundEnabled);
+
+  function toggleSound() {
+    const next = !soundOn;
+    setSoundOn(next);
+    setSoundEnabled(next);
+  }
 
   return (
     <div className="start-screen">
       <a className="back-link back-link--floating" href={GAME_HUB_URL}>
         🎮 All Games
       </a>
+      <button
+        type="button"
+        className="sound-toggle sound-toggle--floating"
+        onClick={toggleSound}
+        title={soundOn ? 'Sound on — tap to mute' : 'Sound off — tap to unmute'}
+      >
+        {soundOn ? '🔊' : '🔇'}
+      </button>
       <div className="start-screen__card">
         <h1>🌍 Worldly</h1>
         <p className="start-screen__subtitle">

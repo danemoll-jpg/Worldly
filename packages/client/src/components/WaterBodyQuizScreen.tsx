@@ -3,6 +3,7 @@ import { GenericAnswer, masteryLevel, QuizAnswerResult, StatsMap, WaterBodyDef, 
 import { getWaterBodyRegions, MapRegion } from '../lib/geo';
 import { GenericQuizController } from '../hooks/useGenericQuiz';
 import { isBetterSession } from '../lib/storage';
+import { completionSound, playSound } from '../lib/sound';
 import { ConfirmDialog } from './ConfirmDialog';
 import { WorldMap } from './WorldMap';
 
@@ -105,6 +106,7 @@ export function WaterBodyQuizScreen({ quiz, stats, onViewRecords, onBack, onBack
       seenResultCount.current = session.results.length;
       setFeedback(result);
       setTypedAnswer('');
+      playSound(result.correct ? 'correct' : 'incorrect');
       const timer = setTimeout(() => setFeedback(null), FEEDBACK_DISPLAY_MS);
       return () => clearTimeout(timer);
     }
@@ -119,6 +121,17 @@ export function WaterBodyQuizScreen({ quiz, stats, onViewRecords, onBack, onBack
     () => WATER_BODIES.filter((w) => { const l = masteryLevel(stats[w.id]); return l === 'shaky' || l === 'struggling'; }).length,
     [stats],
   );
+
+  // Fires once per completed session (quiz.summary going from null to a fresh object) — has to
+  // live up here alongside the other hooks rather than inside the `if (quiz.summary)` render
+  // branch below, since this component (unlike the countries quiz's separate SummaryScreen)
+  // never unmounts between sessions, so a mount-only effect down there wouldn't refire.
+  useEffect(() => {
+    if (!quiz.summary) return;
+    const isNewBest = !quiz.personalBest || isBetterSession(quiz.summary, quiz.personalBest);
+    playSound(completionSound(quiz.summary.percentCorrect, isNewBest));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quiz.summary]);
 
   if (!session) {
     return (

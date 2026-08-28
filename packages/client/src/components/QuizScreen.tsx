@@ -4,6 +4,7 @@ import { ConfirmDialog } from './ConfirmDialog';
 import { countryFlagSrc, promptFor } from '../lib/format';
 import { getContinentBounds, MapFeature } from '../lib/geo';
 import { pickChoices } from '../lib/multipleChoice';
+import { playSound } from '../lib/sound';
 import { WorldMap } from './WorldMap';
 
 interface QuizScreenProps {
@@ -53,6 +54,7 @@ export function QuizScreen({ session, onAnswer, onSkip, onQuit, onRestart }: Qui
       seenResultCount.current = session.results.length;
       setFeedback({ result });
       setTypedAnswer('');
+      playSound(result.correct ? 'correct' : 'incorrect');
       const timer = setTimeout(() => setFeedback(null), FEEDBACK_DISPLAY_MS);
       return () => clearTimeout(timer);
     }

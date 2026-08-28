@@ -77,6 +77,10 @@ Includes:
   gate. A **records screen**, split into a section per universe, lists your best time and best
   accuracy for every quiz setup you've actually completed — there's no single "top score," since
   different setups aren't comparable challenges.
+- **Sound effects** for correct/incorrect answers and quiz completion (a bigger cue for a
+  perfect score, bigger still for a new personal best) — a toggle on the home screen turns them
+  off entirely, and the app runs identically with or without the actual audio files in place
+  (see `packages/client/public/sounds/SOURCE.md`).
 - No bots, no opponents — this is a solo study tool, not a game against anyone. Works entirely
   locally (localStorage) with zero setup; optionally, **sync your stats and history across your
   own devices** with a shared code — no account, same "the code is the access control" trust

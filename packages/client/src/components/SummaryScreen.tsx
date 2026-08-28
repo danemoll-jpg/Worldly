@@ -1,6 +1,8 @@
+import { useEffect } from 'react';
 import { COUNTRY_BY_ID, QuizConfig, SessionSummary } from '@worldly/engine';
 import { formatDuration } from '../lib/format';
 import { GAME_HUB_URL } from '../lib/hub';
+import { completionSound, playSound } from '../lib/sound';
 import { isBetterSession, PersonalBest } from '../lib/storage';
 
 interface SummaryScreenProps {
@@ -20,6 +22,14 @@ export function SummaryScreen({ summary, personalBest, onPlayAgain, onViewRecord
   // with your most-accurate run's percentage from two different sessions.
   const isNewBest = !personalBest || isBetterSession(summary, personalBest);
   const misses = summary.results.filter((r) => !r.correct);
+
+  // This screen only ever exists WHILE a just-finished summary does (see App.tsx's conditional
+  // render) — it mounts fresh each time one appears and unmounts when it's dismissed, so a
+  // mount-only effect here fires exactly once per completed session, no extra tracking needed.
+  useEffect(() => {
+    playSound(completionSound(summary.percentCorrect, isNewBest));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="game-over">
