@@ -16,6 +16,18 @@ _(nothing open right now — see Done below for what's shipped)_
 
 ## Done
 
+- **Sound effects — shipped, waiting on real audio files.** User request: correct/incorrect
+  answer cues, plus quiz-finish/finish-100%/finish-new-record. The user is generating the actual
+  clips externally (ElevenLabs Studio) rather than sourcing/licensing them, so this shipped the
+  full plumbing + a written spec — no audio files are in the repo yet, and the app runs
+  identically with or without them. New `lib/sound.ts` (cached-Audio playback, localStorage
+  on/off preference, the priority logic for which "finish" cue fits — new record beats perfect
+  beats plain); wired into correct/incorrect detection in all three quiz screens and each one's
+  own completion moment; a small sound on/off toggle on the home screen. See
+  `packages/client/public/sounds/SOURCE.md` for the exact 5 filenames expected and the
+  generation prompts (written to avoid retro/chiptune register, per the user's explicit ask).
+  Commit `5d7af3d`.
+
 - **Mastery map: tap a shape to see its name/level/history — shipped.** User request: "on the
   mastery screen, can we click on the area to see the country (or the lake, sea or state)?" A
   detail card (reusing the browse/atlas screen's own styling) appears below the map on tap,
