@@ -512,6 +512,7 @@ async function loadMapData(): Promise<MapData> {
     quizzable: boolean;
     path: string;
     primaryBounds: Bounds | null;
+    geometricCentroid: [number, number];
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -525,6 +526,10 @@ async function loadMapData(): Promise<MapData> {
       quizzable: !!quizCountry,
       path,
       primaryBounds,
+      // d3-geo's own proper area-weighted geometric centroid of the WHOLE feature (every piece,
+      // not just the "primary" one) — see `centroid`/withCentroids below for why this, not a
+      // bbox average, is what actually gets used to place a marker/flag.
+      geometricCentroid: pathGenerator.centroid(f),
     };
   });
 
@@ -543,9 +548,26 @@ async function loadMapData(): Promise<MapData> {
 
   const withCentroids = raw.map((r) => {
     const groupDimension = maxDimensionById.get(r.id) ?? Infinity;
-    const centroid: [number, number] = r.primaryBounds
-      ? [(r.primaryBounds[0] + r.primaryBounds[2]) / 2, (r.primaryBounds[1] + r.primaryBounds[3]) / 2]
-      : [0, 0];
+    // Where a marker/flag actually gets drawn: d3's real geometric centroid, not a bbox average
+    // of the "primary" (largest) piece. The bbox version breaks down for exactly the shapes this
+    // map is full of — a country whose biggest piece spans the antimeridian (Russia's mainland
+    // runs from ~19°E clear across Siberia to Chukotka past 180°, one un-split polygon piece
+    // ~80% of the WHOLE MAP's width; its bbox center landed near Scandinavia, nowhere close to
+    // Russia itself — reported directly by the user as "Russia's flag appears NE of UK") or a
+    // concave/crescent shape wrapping around another country (Norway's coastal strip wraps
+    // Sweden on three sides; its bbox center landed inside Sweden's own territory instead of
+    // Norway's — also reported directly). d3's centroid integrates the actual rendered path's
+    // area, so it isn't fooled by either case the way a min/max coordinate average is. Falls back
+    // to the bbox center only if a feature somehow yields a non-finite centroid (not observed
+    // across this dataset, but bbox-center is itself a fine fallback for the ordinary compact
+    // shapes where the two methods agree closely anyway).
+    const [gx, gy] = r.geometricCentroid;
+    const centroid: [number, number] =
+      Number.isFinite(gx) && Number.isFinite(gy)
+        ? [gx, gy]
+        : r.primaryBounds
+          ? [(r.primaryBounds[0] + r.primaryBounds[2]) / 2, (r.primaryBounds[1] + r.primaryBounds[3]) / 2]
+          : [0, 0];
     const isTiny = r.quizzable && (groupDimension < TINY_PRIMARY_DIMENSION || FORCE_TINY_IDS.has(r.id));
     return { ...r, centroid, isTiny };
   });
