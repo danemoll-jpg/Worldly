@@ -78,8 +78,17 @@ const TINY_PRIMARY_DIMENSION = 2.2;
  * ~32% filled: a thin, jagged coastline, not a solid blob the size the bbox suggests. Reported by
  * the user as "I click right on it and still miss" — exactly what a bbox-overstates-the-real-
  * shape case looks like from the outside. Geographically isolated (nothing else tiny anywhere
- * near Borneo), so same as Palestine: no marker-overlap risk from adding it here. */
-const FORCE_TINY_IDS = new Set(['275', '096']); // Palestine, Brunei
+ * near Borneo), so same as Palestine: no marker-overlap risk from adding it here.
+ *
+ * Solomon Islands and Vanuatu are the same "scattered archipelago" version of the problem, more
+ * extreme than Brunei's: 48 and 27 separate island pieces respectively, spread across a bounding
+ * box (33.4×17.6 and 5.0×22.3 units) that comfortably clears TINY_PRIMARY_DIMENSION even though
+ * no single piece does — so the actual clickable land is a scatter of small islands inside a
+ * much bigger empty box, not a solid shape at all. Reported by the user directly: "I click on
+ * them but have to click around a little before they are recognized." Each other's nearest tiny-
+ * marker neighbor at ~28.6 units apart — comfortably far enough for the adaptive tap radius to
+ * give both the full, generous treatment with no overlap risk. */
+const FORCE_TINY_IDS = new Set(['275', '096', '090', '548']); // Palestine, Brunei, Solomon Islands, Vanuatu
 
 /** Bounds on the adaptive tap radius (see MapFeature.tapRadius): MIN is deliberately bigger
  * than the marker's own visible-dot radius (see WorldMap.tsx) — a hit radius smaller than the
