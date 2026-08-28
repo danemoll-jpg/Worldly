@@ -16,6 +16,33 @@ _(nothing open right now — see Done below for what's shipped)_
 
 ## Done
 
+- **General tap forgiveness, device-width-aware — shipped, with a known remaining limit.** User
+  report: "the game needs some forgiveness in general. I got big ass fingers and even just
+  missed New Hampshire even though I feel like I clicked right on it." Root cause: every
+  invisible tap-padding radius on the map is a fixed number of MAP_VIEWBOX units, not a fixed
+  number of screen pixels — the map's CSS width is responsive, so the SAME padding shrinks
+  noticeably on a phone-width screen, a gap the earlier Rhode Island fix never accounted for
+  (only verified at a desktop-width viewport). Added a live ResizeObserver-based scale factor
+  that grows every tap radius back up to the same physical screen size on a narrower device;
+  bumped the underlying constants up generally too. Found and fixed two real bugs while
+  verifying this on an actual mobile viewport: a genuine overlap regression (New Hampshire's own
+  dead-center tap resolving to Vermont, since the scaled-up flat radius reached past its
+  neighbor's centroid — fixed with a real per-pair geometric ceiling that accounts for the map's
+  own zoom level) and a ResizeObserver that silently never attached at all (a ref-identity/timing
+  bug). Verified with an automated sweep of every US state and water body confirming no
+  self-swallow anywhere. **Known remaining limit**: New England (New Hampshire/Vermont/
+  Massachusetts) is genuinely the tightest-packed corner of the whole map — even with this fix,
+  it gets comparatively little extra padding versus a well-separated region, since the safety
+  ceiling has to respect how close the real geometry actually is. A future pass could use each
+  region's real polygon outline instead of its centroid to measure that ceiling, which would
+  likely help this specific cluster; not attempted here. Commit `9de1a37`.
+
+- **Restart-with-confirmation on all three quiz screens — shipped.** User request: "all map
+  modes need a restart button with confirmation." The countries quiz already had this; the
+  US-states and seas/oceans quizzes didn't. Both wired up to `useGenericQuiz`'s existing
+  `playAgain()`, same header button + `ConfirmDialog` pattern the countries quiz already uses.
+  Commit `9469ff4`.
+
 - **Countries quiz auto-zooms to the selected continent(s) — shipped.** User request: "if the
   user chooses to test on a continent, it would be nice to focus in on the continent
   automatically like we did for the american quiz." WorldMap gained `focusBounds` (a
