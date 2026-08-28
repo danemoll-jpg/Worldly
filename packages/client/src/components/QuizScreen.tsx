@@ -213,7 +213,7 @@ export function QuizScreen({ session, onAnswer, onSkip, onQuit, onRestart }: Qui
     const question = category === 'flag' ? 'Whose flag is this?' : 'Which country has this capital?';
     return (
       <span>
-        {question} {prompt.kind === 'flag' ? <span className="quiz-prompt__flag">{prompt.content}</span> : <strong>{prompt.content}</strong>}
+        {question} {prompt.kind === 'flag' ? <img className="quiz-prompt__flag" src={prompt.content} alt="" /> : <strong>{prompt.content}</strong>}
       </span>
     );
   }
