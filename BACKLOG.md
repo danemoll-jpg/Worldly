@@ -16,6 +16,20 @@ _(nothing open right now — see Done below for what's shipped)_
 
 ## Done
 
+- **Fiji's flag showing west of Angola — fixed.** User report, noticed on the deployed (pre-fix)
+  app. A different root cause than the Russia/Norway/Chile bug even though it looks like the
+  same family: Fiji's raw data includes a degenerate d3-geo resampling artifact ring (948.3
+  units wide, only 2.7 tall — ~357:1 aspect ratio) that the existing MAX_PLAUSIBLE_RING_WIDTH/
+  HEIGHT filter doesn't catch (by design — that filter only drops a ring implausible in BOTH
+  dimensions, so it doesn't also drop Russia's legitimately very-wide mainland). Since Fiji's
+  real islands are small, this sliver's bounding-box area still won "biggest piece" and got
+  picked as primary, so even the already-fixed polylabel logic correctly found a point in the
+  middle of a FAKE shape spanning most of the map. Fixed by excluding pieces with an implausible
+  aspect ratio (>20:1) from primary-piece ELIGIBILITY specifically (not from rendering, where a
+  degenerate sliver is harmless) — verified against all 197 quizzable countries first, Fiji was
+  the only one anywhere near that threshold. Re-verified the full containment sweep and live in
+  the app. Commit `6e9fd36`.
+
 - **Russia's flag showing near the UK, Norway's in Sweden, Chile's in Argentina — fixed.** User
   reports, all from directly noticing wrong flag placement on the map (Chile's noticed right
   after the first pass at this, since that pass only partly fixed it — see below). Root cause:
