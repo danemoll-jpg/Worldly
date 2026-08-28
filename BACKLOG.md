@@ -16,19 +16,25 @@ _(nothing open right now — see Done below for what's shipped)_
 
 ## Done
 
-- **Russia's flag showing near the UK, Norway's flag showing in Sweden — fixed.** User report,
-  both from directly noticing wrong flag placement on the map. Root cause: every country's
-  marker/flag was placed at the bounding-box CENTER of its largest polygon piece, which breaks
-  down for two different real shapes — Russia's mainland is one un-split piece spanning ~80% of
-  the whole map's width (19°E across Siberia to past 180°E), whose bbox center lands near
-  Scandinavia; Norway's coastal strip wraps around Sweden on three sides, so its bbox center
-  falls inside Sweden's own territory instead of Norway's. Switched to d3-geo's proper area-
-  weighted geometric centroid (computed over the WHOLE feature, not just one piece) — verified
-  across all 255 features with no invalid results, so the old bbox-center is now only a
-  defensive fallback. Verified via live screenshots: Russia's flag now lands well inside Russia;
-  Norway's and Sweden's are clearly separated on their own countries; a broad sweep of other
-  tricky shapes (Chile, Indonesia, Philippines, Canada, the Balkans, Vietnam, Malaysia, Fiji, New
-  Zealand, Denmark) all correct; tiny-country dot markers and insets unaffected. Commit `53e24b2`.
+- **Russia's flag showing near the UK, Norway's in Sweden, Chile's in Argentina — fixed.** User
+  reports, all from directly noticing wrong flag placement on the map (Chile's noticed right
+  after the first pass at this, since that pass only partly fixed it — see below). Root cause:
+  every country's marker/flag was placed at the bounding-box CENTER of its largest polygon
+  piece. First pass switched that to d3-geo's proper area-weighted geometric centroid, which
+  fixed Russia (mainland is one un-split piece spanning ~80% of the map's width — antimeridian
+  wrap — whose bbox center landed near Scandinavia) and looked right for Norway/Chile in a
+  screenshot at the time. It wasn't actually enough for either of those two, though — verified
+  properly afterward with a real point-in-polygon containment check (not just eyeballing a
+  screenshot): a true geometric centroid of a long, thin, CURVED coastal strip can itself fall
+  outside the strip, in the "hollow" the curve wraps around (Norway's around Sweden, Chile's
+  across the Andes into Argentina) — confirmed Chile's new centroid had moved the right
+  direction but was still, provably, in Argentina. Second pass replaced centroid math entirely
+  with `polylabel` (Mapbox's "pole of inaccessibility" algorithm, the standard tool for map
+  label placement — added as a real dependency), which operates on the polygon's own ring
+  coordinates and is guaranteed to land strictly inside the shape. Verified with the proper
+  containment check across all 197 quizzable countries: Chile, Norway, Sweden, and Russia all
+  confirmed strictly inside their own polygon now (not just visually plausible). Commits
+  `53e24b2`, `4d4782a`.
 
 - **General tap forgiveness, device-width-aware — shipped, with a known remaining limit.** User
   report: "the game needs some forgiveness in general. I got big ass fingers and even just
