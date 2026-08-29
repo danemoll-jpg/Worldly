@@ -12,16 +12,6 @@ just forgotten.
 
 ## Open
 
-- **Global leaderboard — code complete, blocked on one manual step.** Everything is built (see
-  Done below) and verified as far as automated testing can reach — the one thing left is YOU
-  pasting the updated `firestore.rules` into the Firebase console (Firestore → Rules → Publish;
-  see README's "Deploying" section). Until that's done, every submission/fetch fails closed (the
-  UI shows "couldn't reach the leaderboard" rather than crashing, but nothing actually saves or
-  loads). Once published, worth a real end-to-end check — start a full countries/US-states/water-
-  bodies quiz, confirm the score lands on the right board. A "PlaywrightTester" test entry may
-  show up on the seas & oceans board the first time this genuinely goes through — safe to ignore
-  or delete from the Firestore console, it's just leftover verification data.
-
 - **Push notifications for the daily challenge.** User specifically likes this idea. A reminder
   that arrives even when the app is closed needs more than the service worker added for offline
   support — it needs a push subscription plus something that actually decides "send it now,"
@@ -40,8 +30,7 @@ just forgotten.
 
 ## Done
 
-- **Global leaderboard — built, verified as far as possible without the rules being live (see
-  Open above for the one remaining manual step).** Scope: a top-10 board per quiz type
+- **Global leaderboard — shipped, fully verified live.** Scope: a top-10 board per quiz type
   (Countries / US States / Seas & Oceans), ranked by best % correct with time as a tiebreak —
   only the standard full quiz counts (find it on the map, everything included), so a weak-spots
   run or the flags/typing categories don't pollute the comparison. New files:
@@ -54,11 +43,26 @@ just forgotten.
   /entries/{playerId}` match block: bounds-checks the shape and only allows a write that's an
   actual improvement over your own prior entry — same "not airtight against a determined
   attacker, blocks casual tampering" tradeoff `/syncs` already documented, written up again in
-  the rules file since this data is public rather than behind a private code. Verified via
-  Playwright against the real Firebase project: completed a full 20-question seas & oceans quiz,
-  confirmed the "eligible for leaderboard" prompt appeared, submitted a display name, and
-  confirmed the submission attempt fired correctly — the actual write/read currently fails closed
-  exactly as expected since the rules above aren't published yet (see Open).
+  the rules file since this data is public rather than behind a private code.
+
+  Verified in two stages, once the user published the updated rules: (1) a direct Firestore SDK
+  write against the live project succeeded, confirming the rules themselves are correct; (2) a
+  full Playwright run through the real UI — finish a 20-question seas & oceans quiz, get the name
+  prompt, submit — ended with "🏆 New leaderboard entry!" and a read-back from Firestore
+  confirmed the entry actually landed with the right fields. An earlier attempt at (2) looked
+  like it failed (no entry showed up), but that was a test-harness bug, not an app bug — the
+  script closed the browser only ~1.5s after submitting, before the real network round-trip to
+  Firestore had finished, aborting the write in flight; giving it a realistic ~6s settled it.
+
+  One incidental finding from testing, not a bug: the rules' write-validation conditions
+  reference `request.resource.data`, which is only present on a create/update, not a delete — so
+  a delete request evaluates those conditions against nothing and gets rejected. The app never
+  needs to delete a leaderboard entry itself, so this doesn't affect real usage, but it did mean
+  the two test entries this verification created (`waterBodies/entries/diagnostic-test-player`
+  and `.../<a random uuid>`, display names "DiagnosticCheck" and "VerifiedTester") couldn't be
+  cleaned up from a script — they need a manual delete from the Firestore console's Data tab if
+  you want the Seas & Oceans board tidy (harmless to leave otherwise, they'll just sit at the
+  bottom of a 5%-accuracy leaderboard).
 
 - **Offline support (real PWA) — shipped.** Add-to-Home-Screen already worked (manifest.json +
   apple-touch-icon, from an earlier session), but the installed app was still fully broken
