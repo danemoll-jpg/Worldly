@@ -12,9 +12,43 @@ just forgotten.
 
 ## Open
 
-_(nothing open right now — see Done below for what's shipped)_
+- **Global leaderboard (top 10, per quiz type).** User wants to keep the existing local
+  personal-bests but also see how they compare to others. Scoped decisions already made: a
+  separate top-10 board per quiz type (Countries / US States / Seas & Oceans), ranked by best %
+  correct — not one combined score. Identity: a one-time prompt to pick a public display name the
+  first time you'd appear on a board (stored locally, reused after that), not an anonymous
+  auto-generated handle. Backend: Firestore, same project already used for sync — needs a new
+  collection, security rules that validate shape/bounds on writes (a raw client-side Firestore
+  write is otherwise fake-able via dev tools — this needs real server-side validation, not just
+  UI-level trust), and a leaderboard-viewing screen that also shows the player's own rank even if
+  outside the top 10.
+
+- **Push notifications for the daily challenge.** User specifically likes this idea. A reminder
+  that arrives even when the app is closed needs more than the service worker added for offline
+  support — it needs a push subscription plus something that actually decides "send it now,"
+  which means a small scheduled Firebase Cloud Function (once-a-day trigger). This requires
+  enabling Firebase's Blaze (pay-as-you-go) plan first — a card on file, though real cost at this
+  scale is $0/month — which only the user can do from the Firebase console. Blocked on that step;
+  ping the user for it when this is picked up. Do this one last, after the leaderboard, since it's
+  the only piece with an external dependency outside the codebase.
+
+- **Capacitor wrap for real App Store / Play Store distribution.** Longer-term, after the PWA
+  work above is solid. Goal isn't really Worldly-the-business (geography quizzes are a saturated,
+  mostly-free category — Sporcle, Seterra, GeoGuessr, Countryle already own it) so much as using
+  a low-stakes, already-built app to learn the actual store-submission pipeline once (developer
+  accounts, screenshots, privacy policy, review process, TestFlight) — a skill that transfers to
+  whatever app eventually is worth monetizing seriously.
 
 ## Done
+
+- **Offline support (real PWA) — shipped.** Add-to-Home-Screen already worked (manifest.json +
+  apple-touch-icon, from an earlier session), but the installed app was still fully broken
+  offline. Added vite-plugin-pwa: precaches the app shell (JS/CSS/HTML/icons) at build time,
+  runtime-caches the map data JSON (~4MB) and flag SVGs (~9.4MB) and sounds the first time each
+  is actually fetched rather than force-downloading all ~13MB on first visit. Verified via
+  Playwright against a real production preview build: after playing a quiz online (populating the
+  runtime caches) and then actually going offline, a full reload still renders the home screen
+  and a brand-new quiz still renders the map from cache. Commit `84a8c28`.
 
 - **"Actually, that was right" override button — shipped.** User: "I just think I need to have a
   'that was right' button. Was doing all countries got like 160 countries in clearly hit san
