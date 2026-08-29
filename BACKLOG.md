@@ -12,16 +12,15 @@ just forgotten.
 
 ## Open
 
-- **Global leaderboard (top 10, per quiz type).** User wants to keep the existing local
-  personal-bests but also see how they compare to others. Scoped decisions already made: a
-  separate top-10 board per quiz type (Countries / US States / Seas & Oceans), ranked by best %
-  correct — not one combined score. Identity: a one-time prompt to pick a public display name the
-  first time you'd appear on a board (stored locally, reused after that), not an anonymous
-  auto-generated handle. Backend: Firestore, same project already used for sync — needs a new
-  collection, security rules that validate shape/bounds on writes (a raw client-side Firestore
-  write is otherwise fake-able via dev tools — this needs real server-side validation, not just
-  UI-level trust), and a leaderboard-viewing screen that also shows the player's own rank even if
-  outside the top 10.
+- **Global leaderboard — code complete, blocked on one manual step.** Everything is built (see
+  Done below) and verified as far as automated testing can reach — the one thing left is YOU
+  pasting the updated `firestore.rules` into the Firebase console (Firestore → Rules → Publish;
+  see README's "Deploying" section). Until that's done, every submission/fetch fails closed (the
+  UI shows "couldn't reach the leaderboard" rather than crashing, but nothing actually saves or
+  loads). Once published, worth a real end-to-end check — start a full countries/US-states/water-
+  bodies quiz, confirm the score lands on the right board. A "PlaywrightTester" test entry may
+  show up on the seas & oceans board the first time this genuinely goes through — safe to ignore
+  or delete from the Firestore console, it's just leftover verification data.
 
 - **Push notifications for the daily challenge.** User specifically likes this idea. A reminder
   that arrives even when the app is closed needs more than the service worker added for offline
@@ -40,6 +39,26 @@ just forgotten.
   whatever app eventually is worth monetizing seriously.
 
 ## Done
+
+- **Global leaderboard — built, verified as far as possible without the rules being live (see
+  Open above for the one remaining manual step).** Scope: a top-10 board per quiz type
+  (Countries / US States / Seas & Oceans), ranked by best % correct with time as a tiebreak —
+  only the standard full quiz counts (find it on the map, everything included), so a weak-spots
+  run or the flags/typing categories don't pollute the comparison. New files:
+  `network/leaderboardIdentity.ts` (a locally-generated playerId + a display name chosen once),
+  `network/leaderboard.ts` (Firestore read/write + the eligibility rules above),
+  `hooks/useLeaderboardSubmission.ts` + `components/LeaderboardSubmission.tsx` +
+  `components/DisplayNamePrompt.tsx` (the submit-on-completion flow, shared across all three quiz
+  screens rather than tripled), `components/LeaderboardScreen.tsx` (the viewing screen — top 10
+  plus your own rank if you're outside it). `firestore.rules` gained a `/leaderboard/{quizType}
+  /entries/{playerId}` match block: bounds-checks the shape and only allows a write that's an
+  actual improvement over your own prior entry — same "not airtight against a determined
+  attacker, blocks casual tampering" tradeoff `/syncs` already documented, written up again in
+  the rules file since this data is public rather than behind a private code. Verified via
+  Playwright against the real Firebase project: completed a full 20-question seas & oceans quiz,
+  confirmed the "eligible for leaderboard" prompt appeared, submitted a display name, and
+  confirmed the submission attempt fired correctly — the actual write/read currently fails closed
+  exactly as expected since the rules above aren't published yet (see Open).
 
 - **Offline support (real PWA) — shipped.** Add-to-Home-Screen already worked (manifest.json +
   apple-touch-icon, from an earlier session), but the installed app was still fully broken
