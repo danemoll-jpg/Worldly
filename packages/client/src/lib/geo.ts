@@ -87,8 +87,32 @@ const TINY_PRIMARY_DIMENSION = 2.2;
  * much bigger empty box, not a solid shape at all. Reported by the user directly: "I click on
  * them but have to click around a little before they are recognized." Each other's nearest tiny-
  * marker neighbor at ~28.6 units apart — comfortably far enough for the adaptive tap radius to
- * give both the full, generous treatment with no overlap risk. */
-const FORCE_TINY_IDS = new Set(['275', '096', '090', '548']); // Palestine, Brunei, Solomon Islands, Vanuatu
+ * give both the full, generous treatment with no overlap risk.
+ *
+ * Gambia is the same bbox-overstates-the-shape problem yet again (fill ratio ~39% — a thin river
+ * valley, not the blob its 7.96×2.33 bounding box suggests), reported directly by the user as
+ * "too easy to miss." Its OWN tap radius needs a hand-picked cap, though, rather than the usual
+ * nearest-tiny-neighbor adaptive one (see TINY_TAP_RADIUS_OVERRIDE below): the nearest OTHER
+ * tiny-marker country is Cabo Verde, 23.72 units away — nowhere near close enough to constrain
+ * anything — but Gambia's real neighbor is Senegal, which wraps around it on three sides and
+ * whose own centroid sits only 3.78 units from Gambia's. Giving Gambia the standard, unclamped
+ * MAX_TAP_RADIUS here (and the mobile-width scale-up on top of that) would build an invisible
+ * circle easily big enough to swallow Senegal's own centroid outright — confirmed by the math,
+ * not just suspected, before this override was added. */
+const FORCE_TINY_IDS = new Set(['275', '096', '090', '548', '270']); // Palestine, Brunei, Solomon Islands, Vanuatu, Gambia
+
+/** Hand-picked tap-radius CEILINGS (raw MAP_VIEWBOX units, same desktop-reference convention as
+ * MAX_TAP_RADIUS — WorldMap.tsx's useMapScaleFactor still scales it up further on a narrow phone)
+ * for specific tiny-marker countries where the usual nearest-tiny-neighbor adaptive radius would
+ * be unsafe — see Gambia's own comment above FORCE_TINY_IDS for why. 1.8 sits comfortably under
+ * half the 3.78-unit gap to Senegal's own centroid (so a tap dead-center on Senegal can never
+ * resolve to Gambia), while still meaningfully bigger than Gambia's own real half-height (~1.17)
+ * — a real, if modest, improvement centered on the middle of the country. This doesn't fully
+ * solve tapping right at Gambia's far eastern or western tip (~4 units from its centroid): making
+ * the radius reach that far would mean reaching just as far north/south into Senegal, which isn't
+ * a safe trade — same inherent "a circle can't perfectly cover an elongated sliver" limit New
+ * Hampshire ran into on the US-states map. */
+const TINY_TAP_RADIUS_OVERRIDE: Record<string, number> = { '270': 1.8 }; // Gambia
 
 /** Bounds on the adaptive tap radius (see MapFeature.tapRadius): MIN is deliberately bigger
  * than the marker's own visible-dot radius (see WorldMap.tsx) — a hit radius smaller than the
@@ -639,6 +663,7 @@ async function loadMapData(): Promise<MapData> {
     .filter((f) => f.isTiny && !INSET_GROUP_BY_COUNTRY_ID.has(f.id))
     .map((f) => ({ id: f.id, centroid: f.centroid }));
   function tapRadiusFor(id: string, centroid: [number, number]): number {
+    if (id in TINY_TAP_RADIUS_OVERRIDE) return TINY_TAP_RADIUS_OVERRIDE[id];
     let nearestDistance = Infinity;
     for (const other of markerCentroids) {
       if (other.id === id) continue;
