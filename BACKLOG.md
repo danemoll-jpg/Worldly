@@ -16,6 +16,40 @@ _(nothing open right now — see Done below for what's shipped)_
 
 ## Done
 
+- **"Actually, that was right" override button — shipped.** User: "I just think I need to have a
+  'that was right' button. Was doing all countries got like 160 countries in clearly hit san
+  marino but it said I missed it. Very annoying to miss when i didnt really miss it." Two parts:
+  the immediate San Marino bug (see the inset tap-radius entry below) plus this standalone
+  feature, valuable independent of any specific bug. Engine:
+  `overrideLastResultAsCorrect`/`overrideLastGenericResultAsCorrect` flip only the most recent
+  result from wrong to correct (no-op if already correct or no results yet — never touches
+  anything further back, so it's unambiguous which answer is being corrected). Wired into all
+  three quiz screens; wrong-answer feedback now stays up 4s (was 1.2s) so there's a real window
+  to use it. Found and fixed a real regression during verification: the override's `setSession`
+  call re-triggers each screen's combined "detect new answer + schedule feedback auto-clear"
+  effect without growing `session.results`, landing in the branch that cancels the pending clear
+  timer but never reschedules one — leaving feedback stuck non-null forever, which silently
+  blocked all further taps (every screen's tap handler no-ops while feedback is showing) for the
+  rest of the session. Fixed by splitting each screen's effect in two, with the auto-clear timer
+  keyed on `feedback` itself so it re-arms on any change, override included. Verified via
+  Playwright: a full session with a mid-session override completed normally end-to-end, correctly
+  scored, with the overridden country excluded from "missed this round"; a separate stress run
+  confirmed taps kept registering for 6+ more questions after an override (previously: stuck
+  forever, one question after). Commit `e6dc199`.
+
+- **San Marino/Vatican (and Caribbean) inset tap-radius overlap — fixed.** Root cause of the
+  report above. `buildInset()`'s tap-radius floor (`INSET_MIN_TAP_RADIUS`, 11) was unconditional
+  — applied regardless of how close two dots' real centroids actually were. San Marino and
+  Vatican's real inset centroids are only ~0.98 units apart, so both got radius-11 circles
+  reaching ~10x past their actual gap; whichever won a DOM z-order tie could steal taps clearly
+  aimed at the other. Same bug affected the Caribbean inset group (St Vincent & Grenadines /
+  Saint Lucia; Antigua & Barbuda / St Kitts & Nevis). Identical bug class to the New
+  Hampshire/Vermont region-tap-radius fix from earlier, just never ported to this separate inset
+  system. Fix: removed the floor entirely (`Math.max(0, halfGap)` instead), reduced the margin
+  from 1 to 0.3 unit (some real pairs are under 1 unit apart). Verified via Playwright: all 12
+  inset dots (5 Europe microstates + 7 Caribbean) resolve to themselves when clicked at their own
+  center. Commit `3225f85`.
+
 - **Sound effects genuinely louder — shipped.** User: "I can't even hear it (unless it is
   possible for you to make it louder)" — the incorrect-answer cue. Root cause: the old
   playback used a plain HTMLAudioElement, whose `.volume` tops out at 1.0 (never louder than the
