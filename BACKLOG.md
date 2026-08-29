@@ -16,6 +16,26 @@ _(nothing open right now — see Done below for what's shipped)_
 
 ## Done
 
+- **Sound effects genuinely louder — shipped.** User: "I can't even hear it (unless it is
+  possible for you to make it louder)" — the incorrect-answer cue. Root cause: the old
+  playback used a plain HTMLAudioElement, whose `.volume` tops out at 1.0 (never louder than the
+  clip's own recorded level, and this one was deliberately mixed quiet). Switched to the Web
+  Audio API (AudioContext + GainNode), which has no such ceiling — added a per-cue gain
+  multiplier, 'incorrect' boosted 2.5x over the shared baseline. Same public API, no other file
+  touched. Verified live by intercepting the actual gain value applied (1.75, genuinely past
+  what the old approach could reach). Commit `f7e70f1`.
+
+- **Gambia too easy to miss — fixed, without swallowing Senegal.** Same "bbox overstates the
+  shape" family as Brunei/Solomon Islands/Vanuatu, but the usual fix (adaptive nearest-tiny-
+  neighbor radius) isn't safe here on its own — Gambia's real neighbor Senegal (which wraps
+  around it on three sides) has its own centroid only ~4.8 units from Gambia's, while the
+  nearest OTHER tiny-marker country is 23.72 units away and wouldn't constrain anything. Added a
+  new per-country tap-radius override (1.8 units, comfortably under half the real gap to
+  Senegal's centroid) rather than the standard unclamped max. Verified live, including a
+  properly-redone check of Senegal's own real centroid (not its bounding-box center, which for a
+  shape wrapping a neighbor isn't the same thing — the Norway/Chile lesson again) resolving
+  correctly to Senegal. Commit `e102d58`.
+
 - **Sound effects — shipped, waiting on real audio files.** User request: correct/incorrect
   answer cues, plus quiz-finish/finish-100%/finish-new-record. The user is generating the actual
   clips externally (ElevenLabs Studio) rather than sourcing/licensing them, so this shipped the
