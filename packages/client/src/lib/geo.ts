@@ -167,17 +167,25 @@ function regionTapRadiusCeiling(id: string, centroid: [number, number], all: { i
   return Math.max(0, nearestDistance / 2 - REGION_TAP_RADIUS_MARGIN);
 }
 
-/** Same idea as MIN/MAX_TAP_RADIUS above, but for inset dots (Europe microstates, Caribbean) —
- * a totally different, much smaller coordinate space (each inset's own small viewBox), so the
- * main map's constants don't transfer. Without this, the visible dot itself (r=4 with real
- * surrounding geography drawn, r=7 without) WAS the entire tap target — no padding at all,
- * unlike every tiny country on the main map, which already gets a forgiving invisible tap
- * radius layered under its visible dot. On screen that r=4 dot works out to roughly an 8-9px
- * diameter target, well under any real touch-target size. Bumped up alongside MIN/MAX_TAP_RADIUS
- * after general "needs more forgiveness" feedback — see that pair's own comment. */
-const INSET_MIN_TAP_RADIUS = 11;
+/** Ceiling on the adaptive tap radius for inset dots (Europe microstates, Caribbean) — a totally
+ * different, much smaller coordinate space (each inset's own small viewBox), so the main map's
+ * MAX_TAP_RADIUS doesn't transfer. Without any padding at all, the visible dot itself (r=4 with
+ * real surrounding geography drawn, r=7 without) would be the ENTIRE tap target — well under any
+ * real touch-target size. See tapRadiusFor below for the actual per-pair radius calculation:
+ * there used to also be an INSET_MIN_TAP_RADIUS floor here (11, added alongside this MAX during a
+ * general "needs more forgiveness" pass), but flooring every pair up to that regardless of how
+ * close its real neighbor is caused a real bug — San Marino and Vatican City's real centroids,
+ * within this SAME inset, are only ~0.98 units apart, so flooring BOTH of their tap radii to 11
+ * built two circles each reaching ~10x past the real gap between them, confirmed as the cause of
+ * a user-reported "I clearly hit San Marino and it said I missed" (the tap landed within San
+ * Marino's own real dot but inside Vatican's massively over-inflated circle instead, which —
+ * being later in this group's own array — won the overlap regardless of which one the tap was
+ * actually nearer to). Removed entirely rather than just lowered. */
 const INSET_MAX_TAP_RADIUS = 18;
-const INSET_TAP_RADIUS_MARGIN = 1;
+/** Kept small on purpose: subtracted from HALF the real gap to a member's nearest other inset-
+ * mate, and some real pairs (San Marino/Vatican) are well under 1 unit apart to begin with, so
+ * any margin close to the old flat 1 would erase the entire available safe radius on its own. */
+const INSET_TAP_RADIUS_MARGIN = 0.3;
 
 /** Clusters of tiny countries close enough together that no marker radius can tell taps apart
  * between them on the main map — each gets its own small, zoomed-in inset box instead (see
@@ -227,7 +235,7 @@ export interface InsetFeature {
   cx: number;
   cy: number;
   /** Radius (inset viewBox units) of an invisible, more forgiving tap target layered under the
-   * visible dot — see INSET_MIN_TAP_RADIUS below for why the visible dot alone isn't enough. */
+   * visible dot — see INSET_MAX_TAP_RADIUS below for why the visible dot alone isn't enough. */
   tapRadius: number;
 }
 
@@ -512,7 +520,12 @@ function buildInset(group: (typeof INSET_GROUPS)[number], geojson: any): Inset {
   // radius at half the distance to its nearest OTHER dot in this same inset, so two nearby
   // countries' tap areas never overlap and steal each other's taps — a real risk here, since
   // insets exist specifically for clusters of countries too close together for the main map's
-  // own radius logic to tell apart.
+  // own radius logic to tell apart. Floored at 0, deliberately not at some flat minimum — a floor
+  // that ignores how close the actual neighbor is defeats the entire point of this function (see
+  // INSET_MAX_TAP_RADIUS's own comment for the real San Marino/Vatican bug an earlier,
+  // unconditionally-floored version of this caused). A pair this tightly packed genuinely gets
+  // little to no invisible padding beyond its own visible dot — same inherent limit
+  // MapRegion.tapRadius documents for New Hampshire on the US-states map.
   function tapRadiusFor(id: string, cx: number, cy: number): number {
     let nearestDistance = Infinity;
     for (const other of centroids) {
@@ -520,7 +533,7 @@ function buildInset(group: (typeof INSET_GROUPS)[number], geojson: any): Inset {
       nearestDistance = Math.min(nearestDistance, Math.hypot(other.cx - cx, other.cy - cy));
     }
     const halfGap = nearestDistance / 2 - INSET_TAP_RADIUS_MARGIN;
-    return Math.min(INSET_MAX_TAP_RADIUS, Math.max(INSET_MIN_TAP_RADIUS, halfGap));
+    return Math.min(INSET_MAX_TAP_RADIUS, Math.max(0, halfGap));
   }
 
   return {
