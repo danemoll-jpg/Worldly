@@ -4,13 +4,16 @@ import { getUsStateRegions, MapRegion } from '../lib/geo';
 import { GenericQuizController } from '../hooks/useGenericQuiz';
 import { isBetterSession } from '../lib/storage';
 import { completionSound, playSound } from '../lib/sound';
+import { isGenericQuizLeaderboardEligible } from '../network/leaderboard';
 import { ConfirmDialog } from './ConfirmDialog';
+import { LeaderboardSubmission } from './LeaderboardSubmission';
 import { WorldMap } from './WorldMap';
 
 interface UsStatesQuizScreenProps {
   quiz: GenericQuizController<UsStateDef>;
   stats: StatsMap;
   onViewRecords: () => void;
+  onViewLeaderboard: () => void;
   /** Quitting mid-quiz or finishing — goes all the way home, same as the country quiz's own
    * quit/home buttons. */
   onBack: () => void;
@@ -75,7 +78,7 @@ function promptFor(category: Category, state: UsStateDef): { kind: 'text' | 'fla
  * `quiz`/`stats` come from useQuiz.ts, which owns persistence/sync for this universe — this
  * component is purely presentational over that controller, same relationship QuizScreen has to
  * useQuiz's country-quiz state. */
-export function UsStatesQuizScreen({ quiz, stats, onViewRecords, onBack, onBackToPicker }: UsStatesQuizScreenProps) {
+export function UsStatesQuizScreen({ quiz, stats, onViewRecords, onViewLeaderboard, onBack, onBackToPicker }: UsStatesQuizScreenProps) {
   const [feedback, setFeedback] = useState<QuizAnswerResult | null>(null);
   const [typedAnswer, setTypedAnswer] = useState('');
   const [regions, setRegions] = useState<MapRegion[]>([]);
@@ -362,12 +365,22 @@ export function UsStatesQuizScreen({ quiz, stats, onViewRecords, onBack, onBackT
               </div>
             )}
 
+            <LeaderboardSubmission
+              quizType="usStates"
+              eligible={!!quiz.config && isGenericQuizLeaderboardEligible(quiz.config.mode, quiz.config.scope, quiz.config.category)}
+              summary={summary}
+              onViewLeaderboard={onViewLeaderboard}
+            />
+
             <div className="game-over__actions">
               <button type="button" className="game-over__button" onClick={quiz.playAgain}>
                 🔁 Play again
               </button>
               <button type="button" className="game-over__button game-over__button--secondary" onClick={onViewRecords}>
                 🏅 Records
+              </button>
+              <button type="button" className="game-over__button game-over__button--secondary" onClick={onViewLeaderboard}>
+                🏆 Leaderboard
               </button>
               <button
                 type="button"

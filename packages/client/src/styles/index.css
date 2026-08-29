@@ -1013,6 +1013,154 @@ button {
   white-space: nowrap;
 }
 
+/* ---------- Leaderboard screen ---------- */
+
+.leaderboard-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.8rem 0 0;
+  width: 100%;
+  max-height: 24rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid rgba(224, 164, 88, 0.3);
+  border-radius: 0.6rem;
+}
+
+.leaderboard-list__row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 0.9rem;
+  border-bottom: 1px solid rgba(224, 164, 88, 0.15);
+}
+
+.leaderboard-list__row:last-child {
+  border-bottom: none;
+}
+
+/* The viewer's own row, wherever it lands in the top 10 — same "this makes it easy to find
+   yourself at a glance" idea as the override button's green (see .quiz-override-correct). */
+.leaderboard-list__row--you {
+  background: rgba(224, 164, 88, 0.12);
+}
+
+.leaderboard-list__rank {
+  flex-shrink: 0;
+  width: 2rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.leaderboard-list__name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.leaderboard-list__score {
+  flex-shrink: 0;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.leaderboard-list__time {
+  flex-shrink: 0;
+  font-size: 0.85rem;
+  opacity: 0.75;
+  min-width: 3.5rem;
+  text-align: right;
+}
+
+.leaderboard-own-rank {
+  margin: 0.6rem 0 0;
+  font-weight: 600;
+}
+
+.leaderboard-own-rank--hint {
+  font-weight: 400;
+  opacity: 0.75;
+}
+
+/* ---------- "Actually, that was right" override + leaderboard submission ---------- */
+
+.leaderboard-submission {
+  width: 100%;
+  margin: 0.5rem 0;
+}
+
+.leaderboard-submission__status {
+  text-align: center;
+  font-size: 0.9rem;
+}
+
+.leaderboard-submission__status--success {
+  color: var(--good-green);
+  font-weight: 600;
+}
+
+.leaderboard-submission__status--muted {
+  opacity: 0.65;
+  font-size: 0.8rem;
+}
+
+.leaderboard-submission__link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.leaderboard-name-prompt {
+  width: 100%;
+  padding: 0.75rem 0.9rem;
+  border-radius: 0.6rem;
+  border: 2px solid var(--accent);
+  background: rgba(224, 164, 88, 0.08);
+}
+
+.leaderboard-name-prompt__label {
+  margin: 0 0 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.leaderboard-name-prompt__row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.leaderboard-name-prompt__input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0.5rem 0.7rem;
+  border-radius: 0.5rem;
+  border: none;
+  font-size: 1rem;
+}
+
+.leaderboard-name-prompt__submit {
+  flex-shrink: 0;
+  padding: 0.5rem 0.9rem;
+  border-radius: 0.5rem;
+  border: none;
+  background: var(--accent);
+  color: var(--accent-dark);
+  font-weight: 700;
+}
+
+.leaderboard-name-prompt__submit:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 /* ---------- Mastery universe picker ---------- */
 
 /* Reuses .start-screen__options' button-row look (see that rule) outside its usual

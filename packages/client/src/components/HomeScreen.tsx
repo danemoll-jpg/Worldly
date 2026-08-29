@@ -11,6 +11,7 @@ interface HomeScreenProps {
   onBrowse: () => void;
   onMasteryMap: () => void;
   onRecords: () => void;
+  onLeaderboard: () => void;
   onDaily: () => void;
   onSync: () => void;
   syncStatus: SyncStatus;
@@ -23,6 +24,7 @@ export function HomeScreen({
   onBrowse,
   onMasteryMap,
   onRecords,
+  onLeaderboard,
   onDaily,
   onSync,
   syncStatus,
@@ -87,6 +89,11 @@ export function HomeScreen({
             <span className="home-screen__choice-emoji">🏅</span>
             <span className="home-screen__choice-title">Your records</span>
             <span className="home-screen__choice-sub">Best time and accuracy for every quiz setup you've completed.</span>
+          </button>
+          <button type="button" className="home-screen__choice" onClick={onLeaderboard}>
+            <span className="home-screen__choice-emoji">🏆</span>
+            <span className="home-screen__choice-title">Leaderboard</span>
+            <span className="home-screen__choice-sub">See the global top 10 and how you compare.</span>
           </button>
           <button type="button" className="home-screen__choice" onClick={onSync}>
             <span className="home-screen__choice-emoji">🔄</span>

@@ -37,10 +37,11 @@ function GenericRecordsList({ records }: { records: GenericConfigRecord[] }) {
   );
 }
 
-/** Personal bests, one row per distinct quiz setup you've actually completed — there's no
- * single "top score" for the app (a full-world find-it run and a full-world type-it run aren't
- * comparable), so this is a list of separate records rather than one leaderboard. Solo study
- * tool, no other players — "personal" is the operative word here, not competitive.
+/** Personal bests, one row per distinct quiz setup you've actually completed (a full-world
+ * find-it run and a full-world type-it run aren't comparable, so this is a list of separate
+ * records rather than one ranking) — "personal" is the operative word here, not competitive.
+ * For the global, other-players-included comparison, see LeaderboardScreen instead, which only
+ * covers the one standard full-quiz setup per quiz type rather than every setup you've played.
  *
  * Covers all three quiz universes (countries, seas/oceans, US states) as three separate
  * sections — a records list is inherently "records within one comparable universe," so these

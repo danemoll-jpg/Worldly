@@ -81,12 +81,19 @@ Includes:
   perfect score, bigger still for a new personal best) — a toggle on the home screen turns them
   off entirely, and the app runs identically with or without the actual audio files in place
   (see `packages/client/public/sounds/SOURCE.md`).
-- No bots, no opponents — this is a solo study tool, not a game against anyone. Works entirely
-  locally (localStorage) with zero setup; optionally, **sync your stats and history across your
-  own devices** with a shared code — no account, same "the code is the access control" trust
-  model as the online rooms in the rest of this series (see "Deploying" below to turn it on).
-  Sync covers all three quiz universes, and there's a one-tap **reset** to clear all stats and
-  history (synced or local-only) if you want a clean slate.
+- No bots, no opponents — this is fundamentally a solo study tool, not a game against anyone.
+  Works entirely locally (localStorage) with zero setup; optionally, **sync your stats and
+  history across your own devices** with a shared code — no account, same "the code is the
+  access control" trust model as the online rooms in the rest of this series (see "Deploying"
+  below to turn it on). Sync covers all three quiz universes, and there's a one-tap **reset** to
+  clear all stats and history (synced or local-only) if you want a clean slate.
+- A **global leaderboard**, one top-10 per quiz universe, ranked by best accuracy on the
+  standard full quiz (find it on the map, everything included — other modes/scopes don't count,
+  so every entry is the same test). Opt-in and separate from the records screen above: nothing is
+  submitted until a completed session actually qualifies, at which point you're prompted once for
+  a public display name (stored locally, reused after that). Same Firebase project as sync, same
+  "paste `firestore.rules` into the console" setup step (see "Deploying" below) — needs that step
+  done before it'll actually work, same as sync.
 
 ## Quick start
 
@@ -235,7 +242,7 @@ against a determined attacker).
    `netlify.toml` already has the build command and publish directory set for Netlify
    specifically — just "Import from Git" and deploy. This alone gets you the whole app, sync
    included in the UI — it just won't successfully connect until the next step is done.
-2. **Firebase (only needed for cross-device sync)**: create a project at
+2. **Firebase (needed for cross-device sync AND the leaderboard)**: create a project at
    [console.firebase.google.com](https://console.firebase.google.com), enable **Firestore**
    (Standard edition). In Project Settings → General → Your apps, add a Web app and copy its
    config object into `packages/client/src/network/firebase.ts` (it currently has
@@ -243,6 +250,11 @@ against a determined attacker).
    Firestore → Rules → Publish. No environment variables needed at build time — the Firebase
    web config isn't a secret (access control is enforced by `firestore.rules`, not by hiding
    the config), so it just gets committed directly in `firebase.ts` once filled in.
+   **Whenever `firestore.rules` changes** (adding the leaderboard collection, for instance) —
+   re-paste the whole file into Firestore → Rules → Publish again; the console doesn't pick up
+   repo changes on its own. Until that's done, writes to whatever the new rules were meant to
+   allow just get silently rejected (caught in the UI as "couldn't reach" rather than a crash,
+   but the feature won't actually work).
 
 ## Extending this later
 

@@ -18,5 +18,41 @@ service cloud.firestore {
                    && request.resource.data.history is list
                    && request.resource.data.history.size() <= 200;
     }
+
+    // Global leaderboards — one collection of entries per quiz type, one entry per player (see
+    // src/network/leaderboardIdentity.ts's locally-generated playerId, which IS the doc id here
+    // — a client only ever writes to its own entry, never anyone else's).
+    //
+    // IMPORTANT CAVEAT: same tradeoff as /syncs above, worth repeating since this data is public
+    // rather than behind a private code — without Firebase Auth + Cloud Functions doing the
+    // actual writes server-side, a determined person could call the Firestore SDK/REST API
+    // directly and write a fabricated score (attributed to their own playerId, or, if they
+    // guess/observe someone else's, overwrite that player's entry with a bogus "improvement").
+    // What's enforced below is shape/bounds validation and "only an improvement over your own
+    // prior entry" — enough to block casual tampering (a stray bad write, an accidental
+    // duplicate), not a guarantee against someone determined to cheat. Accepted tradeoff for a
+    // small, mostly-friends-and-family leaderboard — see src/network/leaderboard.ts's own
+    // header comment for the real fix if that stops being true.
+    match /leaderboard/{quizType}/entries/{playerId} {
+      allow read: if true;
+      allow write: if quizType in ['countries', 'usStates', 'waterBodies']
+                   && request.resource.data.playerId == playerId
+                   && request.resource.data.displayName is string
+                   && request.resource.data.displayName.size() > 0
+                   && request.resource.data.displayName.size() <= 24
+                   && request.resource.data.percentCorrect is number
+                   && request.resource.data.percentCorrect >= 0
+                   && request.resource.data.percentCorrect <= 100
+                   && request.resource.data.correctCount is number
+                   && request.resource.data.correctCount >= 0
+                   && request.resource.data.totalQuestions is number
+                   && request.resource.data.totalQuestions >= 1
+                   && request.resource.data.totalQuestions <= 300
+                   && request.resource.data.timeSeconds is number
+                   && request.resource.data.timeSeconds >= 0
+                   && request.resource.data.timeSeconds <= 36000
+                   && (!exists(/databases/$(database)/documents/leaderboard/$(quizType)/entries/$(playerId))
+                       || request.resource.data.percentCorrect >= resource.data.percentCorrect);
+    }
   }
 }

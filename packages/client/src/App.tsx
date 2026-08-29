@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { DailyChallengeScreen } from './components/DailyChallengeScreen';
 import { HomeScreen } from './components/HomeScreen';
+import { LeaderboardScreen } from './components/LeaderboardScreen';
 import { LookupScreen } from './components/LookupScreen';
 import { MasteryScreen } from './components/MasteryScreen';
 import { QuizPickerScreen } from './components/QuizPickerScreen';
@@ -14,7 +15,7 @@ import { UsStatesQuizScreen } from './components/UsStatesQuizScreen';
 import { WaterBodyQuizScreen } from './components/WaterBodyQuizScreen';
 import { useQuiz } from './hooks/useQuiz';
 
-type Screen = 'home' | 'quizPicker' | 'setup' | 'lookup' | 'mastery' | 'sync' | 'records' | 'daily' | 'waterBodies' | 'usStates';
+type Screen = 'home' | 'quizPicker' | 'setup' | 'lookup' | 'mastery' | 'sync' | 'records' | 'daily' | 'waterBodies' | 'usStates' | 'leaderboard';
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('home');
@@ -22,6 +23,8 @@ export default function App() {
   // BACK to that same summary (quiz.summary is untouched) instead of losing it the way changing
   // `screen` to 'records' would — that branch only ever renders when quiz.summary is falsy.
   const [viewingRecordsFromSummary, setViewingRecordsFromSummary] = useState(false);
+  // Same detour pattern for "View leaderboard" from the country quiz's summary screen.
+  const [viewingLeaderboardFromSummary, setViewingLeaderboardFromSummary] = useState(false);
   // Same detour pattern for "Review map" — ReviewMapScreen just needs this session's own
   // results, not any other quiz state.
   const [reviewingMap, setReviewingMap] = useState(false);
@@ -36,6 +39,10 @@ export default function App() {
         onBack={() => setViewingRecordsFromSummary(false)}
       />
     );
+  }
+
+  if (viewingLeaderboardFromSummary) {
+    return <LeaderboardScreen onBack={() => setViewingLeaderboardFromSummary(false)} />;
   }
 
   if (reviewingMap && quiz.summary) {
@@ -54,6 +61,7 @@ export default function App() {
         personalBest={quiz.personalBest}
         onPlayAgain={quiz.playAgain}
         onViewRecords={() => setViewingRecordsFromSummary(true)}
+        onViewLeaderboard={() => setViewingLeaderboardFromSummary(true)}
         onReviewMap={() => setReviewingMap(true)}
         onHome={() => {
           quiz.goHome();
@@ -124,12 +132,17 @@ export default function App() {
     return <DailyChallengeScreen dailyChallenge={quiz.dailyChallenge} onComplete={quiz.completeDailyChallenge} onBack={() => setScreen('home')} />;
   }
 
+  if (screen === 'leaderboard') {
+    return <LeaderboardScreen onBack={() => setScreen('home')} />;
+  }
+
   if (screen === 'waterBodies') {
     return (
       <WaterBodyQuizScreen
         quiz={quiz.waterBody}
         stats={quiz.waterBodyStats}
         onViewRecords={() => setScreen('records')}
+        onViewLeaderboard={() => setScreen('leaderboard')}
         onBack={() => setScreen('home')}
         onBackToPicker={() => setScreen('quizPicker')}
       />
@@ -142,6 +155,7 @@ export default function App() {
         quiz={quiz.usStates}
         stats={quiz.usStateStats}
         onViewRecords={() => setScreen('records')}
+        onViewLeaderboard={() => setScreen('leaderboard')}
         onBack={() => setScreen('home')}
         onBackToPicker={() => setScreen('quizPicker')}
       />
@@ -170,6 +184,7 @@ export default function App() {
       onBrowse={() => setScreen('lookup')}
       onMasteryMap={() => setScreen('mastery')}
       onRecords={() => setScreen('records')}
+      onLeaderboard={() => setScreen('leaderboard')}
       onDaily={() => setScreen('daily')}
       onSync={() => setScreen('sync')}
       syncStatus={quiz.syncStatus}
