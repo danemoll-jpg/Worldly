@@ -16,6 +16,10 @@ interface QuizScreenProps {
    * exactly why QuizScreen gates it behind a confirm dialog rather than firing it straight from
    * the button. */
   onRestart: () => void;
+  /** "Actually, that was right" — see the button that calls this, below. Corrects only the
+   * answer just given; the engine enforces that (overrideLastResultAsCorrect), so passing this
+   * straight through needs no guarding here. */
+  onOverrideLastAnswer: () => void;
 }
 
 interface Feedback {
@@ -23,8 +27,15 @@ interface Feedback {
 }
 
 const FEEDBACK_DISPLAY_MS = 1200;
+/** A wrong answer's feedback stays up longer than a correct one's — not for its own sake, but to
+ * leave a real window to notice and use the "Actually, that was right" override below before it
+ * fades. Added after a direct report of a tap that visibly landed on the right country still
+ * getting marked wrong (a real bug, since fixed — see geo.ts's inset tap-radius fix — but a
+ * manual escape hatch is worth keeping regardless, for whatever imprecision or ambiguity turns
+ * up next). */
+const WRONG_FEEDBACK_DISPLAY_MS = 4000;
 
-export function QuizScreen({ session, onAnswer, onSkip, onQuit, onRestart }: QuizScreenProps) {
+export function QuizScreen({ session, onAnswer, onSkip, onQuit, onRestart, onOverrideLastAnswer }: QuizScreenProps) {
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [typedAnswer, setTypedAnswer] = useState('');
   const [confirmingRestart, setConfirmingRestart] = useState(false);
@@ -45,9 +56,9 @@ export function QuizScreen({ session, onAnswer, onSkip, onQuit, onRestart }: Qui
     return m;
   }, [session.results]);
 
-  // A new result landed (either mode) — flash brief correct/wrong feedback, then let it fade.
-  // The underlying question has already advanced by the time this fires; the feedback is just
-  // a transient overlay on top, not something that blocks or delays progress.
+  // A new result landed (either mode) — flash brief correct/wrong feedback. Auto-clearing that
+  // feedback is a SEPARATE effect below, keyed on `feedback` itself rather than on
+  // `session.results` — see that effect's comment for why the two can't be combined.
   useEffect(() => {
     if (session.results.length > seenResultCount.current) {
       const result = session.results[session.results.length - 1];
@@ -55,11 +66,36 @@ export function QuizScreen({ session, onAnswer, onSkip, onQuit, onRestart }: Qui
       setFeedback({ result });
       setTypedAnswer('');
       playSound(result.correct ? 'correct' : 'incorrect');
-      const timer = setTimeout(() => setFeedback(null), FEEDBACK_DISPLAY_MS);
-      return () => clearTimeout(timer);
+    } else {
+      seenResultCount.current = session.results.length;
     }
-    seenResultCount.current = session.results.length;
   }, [session.results]);
+
+  // Auto-clears whatever feedback is currently showing, re-armed any time `feedback` itself
+  // changes. This has to be its own effect, separate from the one above: that one is keyed on
+  // `session.results`, and `handleOverrideLastAnswer` below calls `onOverrideLastAnswer`, which
+  // replaces the session object WITHOUT growing `results` — so if the clear-timer lived in the
+  // results effect, the override would re-run that effect (canceling its pending timer via
+  // cleanup) but hit the "nothing new" branch, which never reschedules one. That left `feedback`
+  // stuck forever, which silently blocked all further taps (handleMapTap below no-ops while
+  // feedback is showing) — a real bug this split fixes, found by playing an actual session end
+  // to end rather than trusting a single override click in isolation.
+  useEffect(() => {
+    if (!feedback) return;
+    const timer = setTimeout(() => setFeedback(null), feedback.result.correct ? FEEDBACK_DISPLAY_MS : WRONG_FEEDBACK_DISPLAY_MS);
+    return () => clearTimeout(timer);
+  }, [feedback]);
+
+  // "Actually, that was right" — corrects the answer just given (both the persisted session
+  // data, via onOverrideLastAnswer, AND this component's own transient feedback flash, which
+  // isn't derived from the session and wouldn't otherwise update to match). The map's own
+  // colors (fillFor below, keyed off session.results through resultByCountry) update on their
+  // own once the session data changes — no separate patch needed there.
+  function handleOverrideLastAnswer() {
+    onOverrideLastAnswer();
+    setFeedback((prev) => (prev ? { result: { ...prev.result, correct: true } } : prev));
+    playSound('correct');
+  }
 
   // Skipping swaps `current` without adding a result (the effect above only fires on an
   // answer), so a typed-but-unsubmitted answer needs its own reset tied directly to which
@@ -238,9 +274,16 @@ export function QuizScreen({ session, onAnswer, onSkip, onQuit, onRestart }: Qui
 
       <div className="quiz-prompt">
         {feedback ? (
-          <span className={feedback.result.correct ? 'quiz-prompt__feedback quiz-prompt__feedback--correct' : 'quiz-prompt__feedback quiz-prompt__feedback--wrong'}>
-            {feedback.result.correct ? '✅ Correct!' : `❌ That was ${COUNTRY_BY_ID[feedback.result.countryId]?.name}`}
-          </span>
+          <>
+            <span className={feedback.result.correct ? 'quiz-prompt__feedback quiz-prompt__feedback--correct' : 'quiz-prompt__feedback quiz-prompt__feedback--wrong'}>
+              {feedback.result.correct ? '✅ Correct!' : `❌ That was ${COUNTRY_BY_ID[feedback.result.countryId]?.name}`}
+            </span>
+            {!feedback.result.correct && (
+              <button type="button" className="quiz-override-correct" onClick={handleOverrideLastAnswer}>
+                Actually, that was right ✓
+              </button>
+            )}
+          </>
         ) : current ? (
           <>
             {promptLead()}

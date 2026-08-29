@@ -756,6 +756,26 @@ button {
   cursor: not-allowed;
 }
 
+/* ---------- "Actually, that was right" override ---------- */
+
+.quiz-override-correct {
+  /* Same secondary-pill treatment as .quiz-skip/.quiz-hint, but in the "good" green rather than
+     the accent gold — this is specifically an undo-a-miss action, not a neutral one, so it reads
+     at a glance as "this makes things better" rather than blending into the other pills. */
+  margin-left: 0.5rem;
+  padding: 0.35rem 0.85rem;
+  border-radius: 999px;
+  border: 2px solid var(--good-green);
+  background: transparent;
+  color: var(--good-green);
+  font-weight: 600;
+  font-size: 0.8rem;
+}
+
+.quiz-override-correct:hover {
+  background: rgba(76, 175, 125, 0.15); /* --good-green at low opacity */
+}
+
 /* ---------- Hint button ---------- */
 
 .quiz-hint {

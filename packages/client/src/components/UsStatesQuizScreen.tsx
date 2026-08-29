@@ -22,6 +22,9 @@ interface UsStatesQuizScreenProps {
 type Category = 'name' | 'flag' | 'capital';
 
 const FEEDBACK_DISPLAY_MS = 1200;
+/** See QuizScreen's own identical constant — a wrong answer's feedback stays up longer
+ * specifically to leave a real window for the "Actually, that was right" override below. */
+const WRONG_FEEDBACK_DISPLAY_MS = 4000;
 const SHOW_OUTLINES_KEY = 'worldlyUsStatesShowOutlines';
 /** USA's own id in the country map data (see @worldly/engine's countries.ts) — used purely to
  * borrow its centroid for WorldMap's auto-focus (see focusCountryId below), not to make the
@@ -106,6 +109,9 @@ export function UsStatesQuizScreen({ quiz, stats, onViewRecords, onBack, onBackT
     return m;
   }, [session?.results]);
 
+  // A new result landed — flash brief correct/wrong feedback. Auto-clearing that feedback is a
+  // SEPARATE effect below, keyed on `feedback` itself rather than on `session`/`session.results`
+  // — see that effect's comment for why the two can't be combined.
   useEffect(() => {
     if (!session) return;
     if (session.results.length > seenResultCount.current) {
@@ -114,15 +120,41 @@ export function UsStatesQuizScreen({ quiz, stats, onViewRecords, onBack, onBackT
       setFeedback(result);
       setTypedAnswer('');
       playSound(result.correct ? 'correct' : 'incorrect');
-      const timer = setTimeout(() => setFeedback(null), FEEDBACK_DISPLAY_MS);
-      return () => clearTimeout(timer);
+    } else {
+      seenResultCount.current = session.results.length;
     }
-    seenResultCount.current = session.results.length;
   }, [session, session?.results]);
+
+  // Auto-clears whatever feedback is currently showing, re-armed any time `feedback` itself
+  // changes. Has to be its own effect, separate from the one above: that one is keyed on
+  // `session`/`session.results`, and `handleOverrideLastAnswer` below calls
+  // `quiz.overrideLastAnswer()`, which replaces the session object WITHOUT growing `results` —
+  // so if the clear-timer lived in the results effect, the override would re-run that effect
+  // (canceling its pending timer via cleanup) but hit the "nothing new" branch, which never
+  // reschedules one. That left `feedback` stuck forever, which silently blocked all further taps
+  // (handleRegionTap below no-ops while feedback is showing) — a real bug this split fixes,
+  // found by playing an actual session end to end rather than trusting a single override click
+  // in isolation.
+  useEffect(() => {
+    if (!feedback) return;
+    const timer = setTimeout(() => setFeedback(null), feedback.correct ? FEEDBACK_DISPLAY_MS : WRONG_FEEDBACK_DISPLAY_MS);
+    return () => clearTimeout(timer);
+  }, [feedback]);
 
   useEffect(() => {
     setTypedAnswer('');
   }, [session?.current?.id]);
+
+  // "Actually, that was right" — see the button that calls this. Corrects both the persisted
+  // session data (quiz.overrideLastAnswer) and this component's own transient feedback flash,
+  // which isn't derived from the session and wouldn't otherwise update to match. The map's own
+  // colors (regionFillFor below, keyed off session.results through resultById) update on their
+  // own once the session data changes — no separate patch needed there.
+  function handleOverrideLastAnswer() {
+    quiz.overrideLastAnswer();
+    setFeedback((prev) => (prev ? { ...prev, correct: true } : prev));
+    playSound('correct');
+  }
 
   const weakSpotCount = useMemo(
     () => US_STATES.filter((s) => { const l = masteryLevel(stats[s.id]); return l === 'shaky' || l === 'struggling'; }).length,
@@ -406,9 +438,16 @@ export function UsStatesQuizScreen({ quiz, stats, onViewRecords, onBack, onBackT
 
       <div className="quiz-prompt">
         {feedback ? (
-          <span className={feedback.correct ? 'quiz-prompt__feedback quiz-prompt__feedback--correct' : 'quiz-prompt__feedback quiz-prompt__feedback--wrong'}>
-            {feedback.correct ? '✅ Correct!' : `❌ That was ${US_STATE_BY_ID[feedback.countryId]?.name}`}
-          </span>
+          <>
+            <span className={feedback.correct ? 'quiz-prompt__feedback quiz-prompt__feedback--correct' : 'quiz-prompt__feedback quiz-prompt__feedback--wrong'}>
+              {feedback.correct ? '✅ Correct!' : `❌ That was ${US_STATE_BY_ID[feedback.countryId]?.name}`}
+            </span>
+            {!feedback.correct && (
+              <button type="button" className="quiz-override-correct" onClick={handleOverrideLastAnswer}>
+                Actually, that was right ✓
+              </button>
+            )}
+          </>
         ) : (
           <>
             {promptLead()}

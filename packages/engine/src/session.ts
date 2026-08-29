@@ -91,6 +91,23 @@ export function submitAnswer(state: QuizSessionState, answer: Answer, now: numbe
   };
 }
 
+/** Flips the MOST RECENT answer from wrong to correct — for when a player believes their tap was
+ * mis-registered rather than genuinely wrong (see the client's "Actually, that was right"
+ * override, added after a real report: a tap that visibly landed within San Marino's own marker
+ * dot got mis-attributed to a nearby, over-inflated neighbor's tap circle instead — see geo.ts's
+ * inset tap-radius fix for the root cause that was also found and fixed). Deliberately only ever
+ * touches the LAST result, never an arbitrary past one — there's no UI for correcting anything
+ * further back, and allowing it would make "which answer is this even correcting" ambiguous.
+ * A no-op if there's nothing to flip (no results yet, or the last one was already correct), so
+ * it's safe to call unconditionally. Doesn't touch `askedIds`/`current`/`remaining` — the
+ * question itself already advanced past when it was answered; this only corrects the score. */
+export function overrideLastResultAsCorrect(state: QuizSessionState): QuizSessionState {
+  if (state.results.length === 0) return state;
+  const last = state.results[state.results.length - 1];
+  if (last.correct) return state;
+  return { ...state, results: [...state.results.slice(0, -1), { ...last, correct: true }] };
+}
+
 /** Defers the current question: sends it to the back of the queue instead of answering it, and
  * presents whatever's now at the front instead. Not an answer — doesn't touch `askedIds` or
  * `results`, so it has no effect on stats, scoring, or the session's percent-correct. A no-op

@@ -7,6 +7,7 @@ import {
   GenericSessionState,
   GenericSessionSummary,
   isGenericSessionComplete,
+  overrideLastGenericResultAsCorrect,
   QuizAnswerResult,
   skipGenericCurrent,
   startGenericSession,
@@ -76,6 +77,12 @@ export function useGenericQuiz<T extends GenericQuizItem>(
     setSession((prev) => (prev ? skipGenericCurrent(prev) : prev));
   }
 
+  // "Actually, that was right" — see QuizScreen's own doc comment on the button that calls the
+  // country-quiz equivalent of this. Only ever touches the answer just given.
+  function overrideLastAnswer() {
+    setSession((prev) => (prev ? overrideLastGenericResultAsCorrect(prev) : prev));
+  }
+
   function playAgain() {
     if (config) start(config.mode, config.scope, config.category);
   }
@@ -86,7 +93,7 @@ export function useGenericQuiz<T extends GenericQuizItem>(
     setConfig(null);
   }
 
-  return { session, summary, config, personalBest, start, answer, skip, playAgain, goHome };
+  return { session, summary, config, personalBest, start, answer, skip, overrideLastAnswer, playAgain, goHome };
 }
 
 export type GenericQuizController<T extends GenericQuizItem> = ReturnType<typeof useGenericQuiz<T>>;

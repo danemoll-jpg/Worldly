@@ -126,6 +126,16 @@ export function submitGenericAnswer<T extends GenericQuizItem>(
   };
 }
 
+/** Same contract as session.ts's overrideLastResultAsCorrect — flips the most recent answer from
+ * wrong to correct, touching only the LAST result and only if it was actually wrong. See that
+ * function's own doc comment for why this exists. */
+export function overrideLastGenericResultAsCorrect<T extends GenericQuizItem>(state: GenericSessionState<T>): GenericSessionState<T> {
+  if (state.results.length === 0) return state;
+  const last = state.results[state.results.length - 1];
+  if (last.correct) return state;
+  return { ...state, results: [...state.results.slice(0, -1), { ...last, correct: true }] };
+}
+
 /** Defers the current question to the back of the queue instead of answering it — same contract
  * as session.ts's skipCurrent, including the "no-op with 0 or 1 remaining" termination
  * guarantee. */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isSessionComplete, skipCurrent, startSession, submitAnswer, summarizeSession } from '../src/session.js';
+import { isSessionComplete, overrideLastResultAsCorrect, skipCurrent, startSession, submitAnswer, summarizeSession } from '../src/session.js';
 import { CountryDef, QuizConfig, StatsMap } from '../src/types.js';
 
 const POOL: CountryDef[] = [
@@ -112,6 +112,45 @@ describe('submitAnswer + full session flow', () => {
     const state = startSession(config, POOL, {}, rng);
     const after = submitAnswer(state, { type: 'findIt', clickedCountryId: 'anything' });
     expect(after).toEqual(state);
+  });
+});
+
+describe('overrideLastResultAsCorrect', () => {
+  it('flips the most recent wrong answer to correct', () => {
+    const config: QuizConfig = { mode: 'findIt', category: 'country', continents: 'all', scope: 'all' };
+    let state = startSession(config, POOL, {}, rng);
+    const wrongId = POOL.find((c) => c.id !== state.current!.country.id)!.id;
+    state = submitAnswer(state, { type: 'findIt', clickedCountryId: wrongId });
+    expect(state.results[0].correct).toBe(false);
+
+    const corrected = overrideLastResultAsCorrect(state);
+    expect(corrected.results[0].correct).toBe(true);
+    // Nothing else about that result — or the rest of the session — changes.
+    expect(corrected.results[0].countryId).toBe(state.results[0].countryId);
+    expect(corrected.askedIds).toEqual(state.askedIds);
+    expect(corrected.current).toEqual(state.current);
+  });
+
+  it('only ever touches the LAST result, not an earlier one', () => {
+    const config: QuizConfig = { mode: 'findIt', category: 'country', continents: 'all', scope: 'all' };
+    let state = startSession(config, POOL, {}, rng);
+    // Miss the first question...
+    const firstWrongId = POOL.find((c) => c.id !== state.current!.country.id)!.id;
+    state = submitAnswer(state, { type: 'findIt', clickedCountryId: firstWrongId });
+    // ...then get the second one right.
+    state = submitAnswer(state, { type: 'findIt', clickedCountryId: state.current!.country.id });
+    expect(state.results.map((r) => r.correct)).toEqual([false, true]);
+
+    // Overriding now shouldn't touch the first (already-past) miss — there's nothing to flip on
+    // the last result since it was already correct.
+    const after = overrideLastResultAsCorrect(state);
+    expect(after).toEqual(state);
+  });
+
+  it('is a no-op with no results yet', () => {
+    const config: QuizConfig = { mode: 'findIt', category: 'country', continents: 'all', scope: 'all' };
+    const state = startSession(config, POOL, {}, rng);
+    expect(overrideLastResultAsCorrect(state)).toEqual(state);
   });
 });
 

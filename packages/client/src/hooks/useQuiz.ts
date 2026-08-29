@@ -5,6 +5,7 @@ import {
   COUNTRIES,
   dailyDateKey,
   isSessionComplete,
+  overrideLastResultAsCorrect,
   QuizAnswerResult,
   QuizConfig,
   QuizSessionState,
@@ -401,6 +402,13 @@ export function useQuiz() {
     setSession((prev) => (prev ? skipCurrent(prev) : prev));
   }, []);
 
+  // "Actually, that was right" — see QuizScreen's own doc comment on the button that calls this.
+  // Only ever touches the answer just given (engine-enforced — see overrideLastResultAsCorrect),
+  // so this can't be used to retroactively rewrite some earlier miss from the same session.
+  const overrideLastAnswer = useCallback(() => {
+    setSession((prev) => (prev ? overrideLastResultAsCorrect(prev) : prev));
+  }, []);
+
   const playAgain = useCallback(() => {
     if (config) start(config);
   }, [config, start]);
@@ -428,6 +436,7 @@ export function useQuiz() {
     start,
     answer,
     skip,
+    overrideLastAnswer,
     playAgain,
     goHome,
     completeDailyChallenge,

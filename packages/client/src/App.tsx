@@ -74,6 +74,7 @@ export default function App() {
           setScreen('home');
         }}
         onRestart={quiz.playAgain}
+        onOverrideLastAnswer={quiz.overrideLastAnswer}
       />
     );
   }

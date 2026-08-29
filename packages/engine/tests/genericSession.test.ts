@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   GenericQuizItem,
   isGenericSessionComplete,
+  overrideLastGenericResultAsCorrect,
   skipGenericCurrent,
   startGenericSession,
   submitGenericAnswer,
@@ -79,6 +80,30 @@ describe('submitGenericAnswer + full session flow', () => {
     const state = startGenericSession([], 'findIt', 'all', {}, rng);
     const after = submitGenericAnswer(state, { type: 'findIt', clickedId: 'anything' });
     expect(after).toEqual(state);
+  });
+});
+
+describe('overrideLastGenericResultAsCorrect', () => {
+  it('flips the most recent wrong answer to correct', () => {
+    let state = startGenericSession(POOL, 'findIt', 'all', {}, rng);
+    const wrongId = POOL.find((i) => i.id !== state.current!.id)!.id;
+    state = submitGenericAnswer(state, { type: 'findIt', clickedId: wrongId });
+    expect(state.results[0].correct).toBe(false);
+
+    const corrected = overrideLastGenericResultAsCorrect(state);
+    expect(corrected.results[0].correct).toBe(true);
+    expect(corrected.askedIds).toEqual(state.askedIds);
+  });
+
+  it('is a no-op when the last result was already correct', () => {
+    let state = startGenericSession(POOL, 'findIt', 'all', {}, rng);
+    state = submitGenericAnswer(state, { type: 'findIt', clickedId: state.current!.id });
+    expect(overrideLastGenericResultAsCorrect(state)).toEqual(state);
+  });
+
+  it('is a no-op with no results yet', () => {
+    const state = startGenericSession(POOL, 'findIt', 'all', {}, rng);
+    expect(overrideLastGenericResultAsCorrect(state)).toEqual(state);
   });
 });
 
