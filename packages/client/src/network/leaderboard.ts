@@ -15,10 +15,25 @@
 // instead of trusting whatever the client sends — the same Cloud Function infrastructure the
 // daily-challenge push notifications need anyway (see BACKLOG.md).
 import { collection, doc, getDoc, getDocs, limit, orderBy, query, setDoc } from 'firebase/firestore';
-import { GenericSessionSummary, QuizConfig, SessionSummary } from '@worldly/engine';
+import { QuizConfig } from '@worldly/engine';
 import { db } from './firebase';
+import { GenericSessionRecord, isBetterSession, SessionRecord } from '../lib/storage';
 
 export type LeaderboardQuizType = 'countries' | 'usStates' | 'waterBodies';
+
+/** The only fields a leaderboard entry actually needs — deliberately looser than any one
+ * specific "session result" type, since FOUR different shapes in this codebase carry these same
+ * four fields plus their own extras: SessionSummary/GenericSessionSummary (a session that just
+ * finished) and SessionRecord/GenericSessionRecord (a past session pulled from history — see
+ * findBestEligibleCountryRecord/findBestEligibleGenericRecord below, used to backfill a
+ * leaderboard-worthy score from BEFORE the leaderboard existed). Any of the four satisfies this
+ * structurally, so submitLeaderboardScore doesn't need to care which one it was called with. */
+export interface LeaderboardCandidate {
+  percentCorrect: number;
+  correctCount: number;
+  totalQuestions: number;
+  totalElapsedMs: number;
+}
 
 export interface LeaderboardEntry {
   playerId: string;
@@ -56,11 +71,7 @@ function entryRef(quizType: LeaderboardQuizType, playerId: string) {
   return doc(db, 'leaderboard', quizType, 'entries', playerId);
 }
 
-/** Builds the write payload from either quiz family's summary shape — both SessionSummary
- * (countries) and GenericSessionSummary (water bodies/US states) already carry exactly the
- * fields a leaderboard entry needs, just as two structurally-identical-but-separately-declared
- * interfaces (see genericSession.ts's own comment on why they're not unified). */
-function entryFromSummary(playerId: string, displayName: string, summary: SessionSummary | GenericSessionSummary): Omit<LeaderboardEntry, 'updatedAt'> {
+function entryFromSummary(playerId: string, displayName: string, summary: LeaderboardCandidate): Omit<LeaderboardEntry, 'updatedAt'> {
   return {
     playerId,
     displayName,
@@ -81,7 +92,7 @@ export async function submitLeaderboardScore(
   quizType: LeaderboardQuizType,
   playerId: string,
   displayName: string,
-  summary: SessionSummary | GenericSessionSummary,
+  summary: LeaderboardCandidate,
 ): Promise<boolean> {
   const ref = entryRef(quizType, playerId);
   const existing = await getDoc(ref);
@@ -122,4 +133,21 @@ export async function fetchPlayerRank(quizType: LeaderboardQuizType, playerId: s
   entries.sort((a, b) => b.percentCorrect - a.percentCorrect || a.timeSeconds - b.timeSeconds);
   const index = entries.findIndex((e) => e.playerId === playerId);
   return index === -1 ? null : { rank: index + 1, entry: entries[index] };
+}
+
+/** Finds the best-ever LOCAL history record that would qualify for the countries leaderboard —
+ * for backfilling a score from before the leaderboard existed (see LeaderboardScreen's "check my
+ * history" button), so a genuinely good run someone already played doesn't just get silently
+ * skipped forever because it predates this feature. `null` if nothing in history qualifies.
+ * "Best" uses the same ranking (accuracy first, time as tiebreak) storage.ts's personal-bests
+ * logic already uses for the exact same reason. */
+export function findBestEligibleCountryRecord(history: SessionRecord[]): SessionRecord | null {
+  const eligible = history.filter((r) => r.mode === 'findIt' && r.category === 'country' && r.scope === 'all' && r.continentsKey === 'all');
+  return eligible.reduce<SessionRecord | null>((best, r) => (!best || isBetterSession(r, best) ? r : best), null);
+}
+
+/** Same idea as findBestEligibleCountryRecord, for the water-bodies/US-states quizzes. */
+export function findBestEligibleGenericRecord(history: GenericSessionRecord[]): GenericSessionRecord | null {
+  const eligible = history.filter((r) => r.mode === 'findIt' && r.scope === 'all' && r.category === 'name');
+  return eligible.reduce<GenericSessionRecord | null>((best, r) => (!best || isBetterSession(r, best) ? r : best), null);
 }

@@ -42,7 +42,14 @@ export default function App() {
   }
 
   if (viewingLeaderboardFromSummary) {
-    return <LeaderboardScreen onBack={() => setViewingLeaderboardFromSummary(false)} />;
+    return (
+      <LeaderboardScreen
+        history={quiz.history}
+        waterBodyHistory={quiz.waterBodyHistory}
+        usStateHistory={quiz.usStateHistory}
+        onBack={() => setViewingLeaderboardFromSummary(false)}
+      />
+    );
   }
 
   if (reviewingMap && quiz.summary) {
@@ -133,7 +140,14 @@ export default function App() {
   }
 
   if (screen === 'leaderboard') {
-    return <LeaderboardScreen onBack={() => setScreen('home')} />;
+    return (
+      <LeaderboardScreen
+        history={quiz.history}
+        waterBodyHistory={quiz.waterBodyHistory}
+        usStateHistory={quiz.usStateHistory}
+        onBack={() => setScreen('home')}
+      />
+    );
   }
 
   if (screen === 'waterBodies') {

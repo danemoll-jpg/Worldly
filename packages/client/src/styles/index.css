@@ -1161,6 +1161,41 @@ button {
   cursor: not-allowed;
 }
 
+/* ---------- "Check my past scores" backfill ---------- */
+
+.leaderboard-backfill {
+  width: 100%;
+  margin: 0.75rem 0 0.25rem;
+}
+
+.leaderboard-backfill__trigger {
+  width: 100%;
+  padding: 0.6rem 0.9rem;
+  border-radius: 0.6rem;
+  border: 2px solid var(--accent);
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.leaderboard-backfill__results {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.9rem;
+}
+
+.leaderboard-backfill__results li {
+  padding: 0.4rem 0;
+  border-bottom: 1px solid rgba(224, 164, 88, 0.2);
+}
+
+.leaderboard-backfill__results li:last-child {
+  border-bottom: none;
+}
+
 /* ---------- Mastery universe picker ---------- */
 
 /* Reuses .start-screen__options' button-row look (see that rule) outside its usual
