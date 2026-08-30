@@ -863,6 +863,33 @@ button {
   opacity: 1 !important;
 }
 
+/* ---------- Listen (country name pronunciation) buttons ---------- */
+
+/* Shared by the lookup/atlas screen's English/native pair and the quiz prompt's single
+   pronunciation button — same secondary-pill treatment as .quiz-hint/.quiz-skip, since this is
+   the same kind of "optional extra, not the main action" control. */
+.listen-btn {
+  padding: 0.35rem 0.85rem;
+  border-radius: 999px;
+  border: 2px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 0.8rem;
+}
+
+.listen-btn:hover {
+  background: rgba(224, 164, 88, 0.15);
+}
+
+.lookup-detail__listen {
+  margin-top: 0.6rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
 /* ---------- Lookup screen ---------- */
 
 .lookup-search {

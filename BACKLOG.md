@@ -30,6 +30,40 @@ just forgotten.
 
 ## Done
 
+- **Country name pronunciation audio (English + native) — shipped.** User provided 394 TTS clips
+  (197 countries × English/native pronunciation, generated externally via Google Cloud
+  Text-to-Speech) at `C:\Users\danmo\country-tts\output`, keyed by ISO alpha-2 code with a
+  `manifest.json` joinable by country name. Copied/renamed into
+  `public/audio/countries/{id}_en.mp3` / `{id}_native.mp3` (same `id`-keyed convention the flag
+  SVGs already use), with provenance documented in that folder's `SOURCE.md`. New playback module:
+  `lib/countryAudio.ts` (`playCountryAudio`, independent of the sound-effects on/off toggle — a
+  deliberate "listen" tap shouldn't be silenced by muting quiz dings). The browse/atlas screen
+  (`LookupScreen.tsx`) gained 🔊 English / 🔊 Native buttons on the selected country's detail card.
+  The quiz screen (`QuizScreen.tsx`) autoplays the English pronunciation: before answering only
+  when the country's name is already shown as plain text (findIt+country mode, or continent
+  mode — never for flag/capital-category or typeIt questions, where that would hand over the
+  answer), and after every answer once feedback reveals the identity regardless of mode/category.
+  A "🔊 Hear it" button stays in both places to replay it on demand.
+
+  Two refinements from live user feedback: (1) autoplay initially raced with `session.current`
+  advancing to the next question before the local `feedback` state caught up, so the pre-answer
+  effect could briefly play the WRONG (next) question's name right after answering — fixed using
+  the existing `seenResultCount` ref, read during render (before any effect mutates it), as a
+  synchronous "is there an unprocessed result" guard; verified via real network-request timestamps
+  before/after. (2) The autoplayed name was starting before the `quiz-start`/`correct`/`incorrect`
+  sound effect had finished, talking over it — fixed with a 900ms delay
+  (`COUNTRY_AUDIO_AUTOPLAY_DELAY_MS`) on both autoplay effects, each a cancellable `setTimeout` so
+  skipping/re-answering within that window can't leave a stale clip queued up; verified by
+  patching `window.Audio`/`fetch` in the live app to log `performance.now()` deltas (~900–1000ms
+  between the sound effect firing and the pronunciation starting).
+
+- **Quiz-start sound cue — shipped.** A sixth cue alongside correct/incorrect/quiz-finish(-perfect/
+  -record) — see `lib/sound.ts`. Fires from the single `start()` in both `hooks/useQuiz.ts`
+  (countries) and `hooks/useGenericQuiz.ts` (US states, seas & oceans), so "Start quiz", "Play
+  again", and the in-quiz "Restart" button all trigger it identically across all three quiz
+  universes with no per-screen wiring. New file: `public/sounds/quiz-start.mp3`; generation prompt
+  added to that folder's `SOURCE.md`, matching the existing five cues' format/tone.
+
 - **Global leaderboard — shipped, fully verified live.** Scope: a top-10 board per quiz type
   (Countries / US States / Seas & Oceans), ranked by best % correct with time as a tiebreak —
   only the standard full quiz counts (find it on the map, everything included), so a weak-spots

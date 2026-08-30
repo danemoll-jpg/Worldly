@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Answer, Continent, CONTINENTS, CountryDef, COUNTRY_BY_ID, QuizAnswerResult, QuizSessionState } from '@worldly/engine';
 import { ConfirmDialog } from './ConfirmDialog';
+import { playCountryAudio } from '../lib/countryAudio';
 import { countryFlagSrc, promptFor } from '../lib/format';
 import { getContinentBounds, MapFeature } from '../lib/geo';
 import { pickChoices } from '../lib/multipleChoice';
@@ -34,6 +35,14 @@ const FEEDBACK_DISPLAY_MS = 1200;
  * manual escape hatch is worth keeping regardless, for whatever imprecision or ambiguity turns
  * up next). */
 const WRONG_FEEDBACK_DISPLAY_MS = 4000;
+
+/** Autoplaying a country's name (both effects below) waits this long first — direct report that
+ * the name was audibly starting before a just-triggered sound effect had finished (the quizStart
+ * chime on question 1, or the correct/incorrect cue every other question), talking over it rather
+ * than following it. Neither of those cues is much over a second (see
+ * public/sounds/SOURCE.md — quizStart is "under 1.5 seconds", correct/incorrect "under 1
+ * second"), so this only needs to be a beat, not a real pause. */
+const COUNTRY_AUDIO_AUTOPLAY_DELAY_MS = 900;
 
 export function QuizScreen({ session, onAnswer, onSkip, onQuit, onRestart, onOverrideLastAnswer }: QuizScreenProps) {
   const [feedback, setFeedback] = useState<Feedback | null>(null);
@@ -210,6 +219,55 @@ export function QuizScreen({ session, onAnswer, onSkip, onQuit, onRestart, onOve
   // back a letter that's already on screen. The continent clue stays useful even then, since
   // findIt's actual challenge is spatial (where to tap), not remembering the name.
   const nameAlreadyShown = mode === 'findIt' && category === 'country';
+  // Same leak concern as the hint above, but stricter: hearing the country's name pronounced IS
+  // the answer for every category/mode combination except the ones where the name's already
+  // sitting in the prompt as text (nameAlreadyShown) or continent mode (which always names the
+  // country up front — see promptLead — since the thing being guessed there is its continent,
+  // not its identity). Every other combination offers a listen button only once feedback reveals
+  // the answer (see the feedback branch in the JSX below), never before.
+  const canListenBeforeAnswer = !!current && !feedback && (nameAlreadyShown || mode === 'continent');
+  // True for exactly one transitional render right after answering: `session.current` (a prop)
+  // has already advanced to the NEXT question, but the results effect above hasn't yet run this
+  // commit to call setFeedback for the answer just given — so local `feedback` state still reads
+  // null, same as it would for an ordinary "no feedback pending" render. Without this check, the
+  // pre-answer autoplay effect right below can't tell the two apart and fires for the wrong
+  // (about-to-be-hidden-behind-feedback) question — confirmed by hand: answering Turkey wrong
+  // played Paraguay's clip (the next question underneath) instead of replaying Turkey's. Reading
+  // `seenResultCount.current` here, during RENDER, is safe specifically because refs only change
+  // when an effect mutates them (post-render) — so on this transitional render it still holds last
+  // commit's value, correctly flagging "there's a result no effect has processed yet."
+  const hasUnprocessedResult = session.results.length > seenResultCount.current;
+
+  // Autoplay the target's English pronunciation the instant its name becomes safely visible as
+  // plain text — the same set of cases the pre-answer "Hear it" button covers (canListenBeforeAnswer
+  // above), so hearing it said is the default experience now, with the button there only to
+  // replay it. Re-evaluated whenever the question changes OR feedback stops covering it — a fresh
+  // question, a skip, a restart, or the feedback overlay for the PREVIOUS question clearing to
+  // reveal this one underneath — but not on every unrelated re-render (hint reveals, typed input,
+  // ...), since `feedback` is a stable `null` reference across those.
+  useEffect(() => {
+    if (feedback || hasUnprocessedResult || !current || !canListenBeforeAnswer) return;
+    const country = current.country;
+    const timer = setTimeout(() => playCountryAudio(country, 'en'), COUNTRY_AUDIO_AUTOPLAY_DELAY_MS);
+    // Cancels a still-pending delayed play if the question changes (or the effect otherwise
+    // re-runs) before it fires — e.g. skipping within the delay window shouldn't leave the SKIPPED
+    // country's name queued up to speak over the next one.
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [current?.country.id, feedback, hasUnprocessedResult]);
+
+  // Autoplay the just-answered country's name the instant feedback reveals it — safe to say out
+  // loud in EVERY mode/category once feedback is showing (see the always-present "Hear it" button
+  // in the feedback branch below). Keyed on the country id alone, not the whole `feedback` object,
+  // so "Actually, that was right" (which replaces `feedback` with a new object for the SAME
+  // country — see handleOverrideLastAnswer) doesn't replay the clip a second time.
+  useEffect(() => {
+    const answeredCountry = feedback ? COUNTRY_BY_ID[feedback.result.countryId] : null;
+    if (!answeredCountry) return;
+    const timer = setTimeout(() => playCountryAudio(answeredCountry, 'en'), COUNTRY_AUDIO_AUTOPLAY_DELAY_MS);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [feedback?.result.countryId]);
 
   function promptLead(): React.ReactNode {
     if (mode === 'continent') {
@@ -278,6 +336,15 @@ export function QuizScreen({ session, onAnswer, onSkip, onQuit, onRestart, onOve
             <span className={feedback.result.correct ? 'quiz-prompt__feedback quiz-prompt__feedback--correct' : 'quiz-prompt__feedback quiz-prompt__feedback--wrong'}>
               {feedback.result.correct ? '✅ Correct!' : `❌ That was ${COUNTRY_BY_ID[feedback.result.countryId]?.name}`}
             </span>
+            {COUNTRY_BY_ID[feedback.result.countryId] && (
+              <button
+                type="button"
+                className="listen-btn"
+                onClick={() => playCountryAudio(COUNTRY_BY_ID[feedback.result.countryId]!, 'en')}
+              >
+                🔊 Hear it
+              </button>
+            )}
             {!feedback.result.correct && (
               <button type="button" className="quiz-override-correct" onClick={handleOverrideLastAnswer}>
                 Actually, that was right ✓
@@ -287,6 +354,11 @@ export function QuizScreen({ session, onAnswer, onSkip, onQuit, onRestart, onOve
         ) : current ? (
           <>
             {promptLead()}
+            {canListenBeforeAnswer && (
+              <button type="button" className="listen-btn" onClick={() => playCountryAudio(current.country, 'en')}>
+                🔊 Hear it
+              </button>
+            )}
             {canHint &&
               (hintRevealed ? (
                 <span className="quiz-hint quiz-hint--revealed">

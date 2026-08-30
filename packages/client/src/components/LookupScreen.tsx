@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { COUNTRIES, COUNTRY_BY_ID } from '@worldly/engine';
+import { playCountryAudio } from '../lib/countryAudio';
 import { countryFlagSrc } from '../lib/format';
 import { MapFeature } from '../lib/geo';
 import { WorldMap } from './WorldMap';
@@ -66,6 +67,14 @@ export function LookupScreen({ onBack }: LookupScreenProps) {
               🏛 {selected.capitals.length > 1 ? 'Capitals' : 'Capital'}: {selected.capitals.join(', ')}
             </span>
             <span>🗣 {selected.languages.join(', ')}</span>
+          </div>
+          <div className="lookup-detail__listen">
+            <button type="button" className="listen-btn" onClick={() => playCountryAudio(selected, 'en')}>
+              🔊 English
+            </button>
+            <button type="button" className="listen-btn" onClick={() => playCountryAudio(selected, 'native')}>
+              🔊 Native
+            </button>
           </div>
         </div>
       )}
