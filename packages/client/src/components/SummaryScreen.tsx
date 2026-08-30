@@ -1,8 +1,6 @@
-import { useEffect } from 'react';
 import { COUNTRY_BY_ID, QuizConfig, SessionSummary } from '@worldly/engine';
 import { formatDuration } from '../lib/format';
 import { GAME_HUB_URL } from '../lib/hub';
-import { completionSound, playSound } from '../lib/sound';
 import { isBetterSession, PersonalBest } from '../lib/storage';
 import { isCountryQuizLeaderboardEligible } from '../network/leaderboard';
 import { LeaderboardSubmission } from './LeaderboardSubmission';
@@ -26,13 +24,11 @@ export function SummaryScreen({ summary, config, personalBest, onPlayAgain, onVi
   const isNewBest = !personalBest || isBetterSession(summary, personalBest);
   const misses = summary.results.filter((r) => !r.correct);
 
-  // This screen only ever exists WHILE a just-finished summary does (see App.tsx's conditional
-  // render) — it mounts fresh each time one appears and unmounts when it's dismissed, so a
-  // mount-only effect here fires exactly once per completed session, no extra tracking needed.
-  useEffect(() => {
-    playSound(completionSound(summary.percentCorrect, isNewBest));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // The completion sound itself plays from App.tsx, not here — this screen mounts fresh every
+  // time "View records"/"View leaderboard"/"Review map" detours away and back (quiz.summary is
+  // untouched by those), so a mount-only effect in THIS component can't tell "just finished" apart
+  // from "came back to look again" and would replay the cue each time. See App.tsx's
+  // playedSummarySound ref for where that's actually handled, once per real completion.
 
   return (
     <div className="game-over">

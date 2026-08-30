@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { SessionSummary } from '@worldly/engine';
 import { DailyChallengeScreen } from './components/DailyChallengeScreen';
 import { HomeScreen } from './components/HomeScreen';
 import { LeaderboardScreen } from './components/LeaderboardScreen';
@@ -14,6 +15,8 @@ import { SyncScreen } from './components/SyncScreen';
 import { UsStatesQuizScreen } from './components/UsStatesQuizScreen';
 import { WaterBodyQuizScreen } from './components/WaterBodyQuizScreen';
 import { useQuiz } from './hooks/useQuiz';
+import { completionSound, playSound } from './lib/sound';
+import { isBetterSession } from './lib/storage';
 
 type Screen = 'home' | 'quizPicker' | 'setup' | 'lookup' | 'mastery' | 'sync' | 'records' | 'daily' | 'waterBodies' | 'usStates' | 'leaderboard';
 
@@ -29,6 +32,23 @@ export default function App() {
   // results, not any other quiz state.
   const [reviewingMap, setReviewingMap] = useState(false);
   const quiz = useQuiz();
+
+  // The quiz-complete cue (plain finish / perfect / new-record) has to play exactly once per
+  // finished session, but SummaryScreen itself can't own "have we already played this" — it
+  // mounts and unmounts every time "View records"/"View leaderboard"/"Review map" detours away
+  // and back (see the early returns below), and the whole point of those detours is that
+  // `quiz.summary` is untouched by them, so a fresh SummaryScreen mount looks IDENTICAL to a
+  // genuinely new completion from inside the component. App itself never unmounts across that
+  // detour, so tracking "the last summary we already played a sound for" here — and only firing
+  // when `quiz.summary` actually changes to a NEW object — is what tells "just finished" apart
+  // from "came back to look at the same finish screen again."
+  const playedSummarySound = useRef<SessionSummary | null>(null);
+  useEffect(() => {
+    if (!quiz.summary || playedSummarySound.current === quiz.summary) return;
+    playedSummarySound.current = quiz.summary;
+    const isNewBest = !quiz.personalBest || isBetterSession(quiz.summary, quiz.personalBest);
+    playSound(completionSound(quiz.summary.percentCorrect, isNewBest));
+  }, [quiz.summary, quiz.personalBest]);
 
   if (viewingRecordsFromSummary) {
     return (

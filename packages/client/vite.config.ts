@@ -12,7 +12,14 @@ export default defineConfig({
       // adding the service worker on top, so it must NOT also generate/inject a second manifest.
       manifest: false,
       registerType: 'autoUpdate',
-      injectRegister: 'auto',
+      // 'auto' (the default) falls back to a bare `navigator.serviceWorker.register(...)` script
+      // for a plain non-framework app like this one — none of registerType: 'autoUpdate's actual
+      // "detect a new version, activate it, reload the page" logic lives in that script; that only
+      // exists inside the virtual:pwa-register module's workbox-window wrapper. Registering
+      // through that module ourselves (see src/lib/registerServiceWorker.ts) is what actually
+      // makes autoUpdate live up to its name — see that file for the full story and why this
+      // mattered in practice (an installed desktop shortcut was never picking up new deploys).
+      injectRegister: null,
       workbox: {
         // Explicitly listing what to precache (rather than a broad glob) is deliberate: the app
         // shell (built JS/CSS, index.html, the icons) is small and essential, so it's worth
@@ -55,6 +62,23 @@ export default defineConfig({
             options: {
               cacheName: 'worldly-sounds',
               expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 30 },
+            },
+          },
+          {
+            // Per-country pronunciation clips (394 files — see countryAudio.ts) — same
+            // "uncached, plain network fetch every single time" gap as the map data/flags above
+            // had before their own rules were added, and a real contributor to reports of
+            // pronunciation (and, less directly, other cues sharing the network around the same
+            // moment) playing inconsistently: with no runtime-caching rule at all, EVERY play —
+            // not just the first — depended on that one fetch succeeding quickly enough, and
+            // playCountryAudio's play().catch(() => {}) swallows a slow/failed one exactly the
+            // same as it would a genuinely missing file, silently. CacheFirst here means a clip
+            // only ever depends on the network once; every replay after that is local.
+            urlPattern: /\/audio\/countries\/.*\.mp3$/,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'worldly-country-audio',
+              expiration: { maxEntries: 400, maxAgeSeconds: 60 * 60 * 24 * 30 },
             },
           },
         ],

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Answer, Continent, CONTINENTS, CountryDef, COUNTRY_BY_ID, QuizAnswerResult, QuizSessionState } from '@worldly/engine';
 import { ConfirmDialog } from './ConfirmDialog';
-import { playCountryAudio } from '../lib/countryAudio';
+import { playCountryAudio, unlockCountryAudio } from '../lib/countryAudio';
 import { countryFlagSrc, promptFor } from '../lib/format';
 import { getContinentBounds, MapFeature } from '../lib/geo';
 import { pickChoices } from '../lib/multipleChoice';
@@ -187,26 +187,39 @@ export function QuizScreen({ session, onAnswer, onSkip, onQuit, onRestart, onOve
     return country ? countryFlagSrc(country) : null;
   }
 
+  // Every answer-submitting handler below spends its real, synchronous tap/click/submit gesture
+  // to keep the shared country-audio element unlocked (see countryAudio.ts's unlockCountryAudio)
+  // — both autoplay effects further down play a clip from a `setTimeout`, well after this gesture
+  // has ended, which iOS Safari won't otherwise treat as user-initiated.
   function handleMapTap(feature: MapFeature) {
     if (!current || mode !== 'findIt' || !feature.quizzable || feedback) return;
+    unlockCountryAudio();
     onAnswer({ type: 'findIt', clickedCountryId: feature.id });
   }
 
   function handleTypeSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!current || feedback || !typedAnswer.trim()) return;
+    unlockCountryAudio();
     onAnswer({ type: 'typeIt', submittedAnswer: typedAnswer });
   }
 
   function handleContinentPick(continent: Continent) {
     if (!current || feedback) return;
+    unlockCountryAudio();
     onAnswer({ type: 'continent', selectedContinent: continent });
   }
 
   function handleChoicePick(countryId: string) {
     if (!current || feedback) return;
+    unlockCountryAudio();
     setAnsweredChoice({ options: choices, correctId: current.country.id, pickedId: countryId });
     onAnswer({ type: 'findIt', clickedCountryId: countryId });
+  }
+
+  function handleSkip() {
+    unlockCountryAudio();
+    onSkip();
   }
 
   const canSkip = !!current && !feedback && session.remaining.length > 1;
@@ -256,18 +269,10 @@ export function QuizScreen({ session, onAnswer, onSkip, onQuit, onRestart, onOve
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current?.country.id, feedback, hasUnprocessedResult]);
 
-  // Autoplay the just-answered country's name the instant feedback reveals it — safe to say out
-  // loud in EVERY mode/category once feedback is showing (see the always-present "Hear it" button
-  // in the feedback branch below). Keyed on the country id alone, not the whole `feedback` object,
-  // so "Actually, that was right" (which replaces `feedback` with a new object for the SAME
-  // country — see handleOverrideLastAnswer) doesn't replay the clip a second time.
-  useEffect(() => {
-    const answeredCountry = feedback ? COUNTRY_BY_ID[feedback.result.countryId] : null;
-    if (!answeredCountry) return;
-    const timer = setTimeout(() => playCountryAudio(answeredCountry, 'en'), COUNTRY_AUDIO_AUTOPLAY_DELAY_MS);
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [feedback?.result.countryId]);
+  // Deliberately NOT autoplaying the just-answered country's name when feedback reveals it — it
+  // already played up front (the effect above, wherever that applies) or is one tap away via the
+  // "Hear it" button in the feedback branch below; repeating it automatically on every single
+  // answer got noisy fast. Direct feedback: only say it again when the player actually asks.
 
   function promptLead(): React.ReactNode {
     if (mode === 'continent') {
@@ -370,7 +375,7 @@ export function QuizScreen({ session, onAnswer, onSkip, onQuit, onRestart, onOve
                   🤔 Hint
                 </button>
               ))}
-            <button type="button" className="quiz-skip" onClick={onSkip} disabled={!canSkip} title="Come back to this one later in the session">
+            <button type="button" className="quiz-skip" onClick={handleSkip} disabled={!canSkip} title="Come back to this one later in the session">
               Skip for now ⤼
             </button>
           </>

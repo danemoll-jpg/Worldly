@@ -11,10 +11,32 @@
 // 394 files' worth of AudioBuffers on first use isn't worth it for something played one clip at a
 // time, on demand. The browser's ordinary HTTP cache already avoids re-downloading a clip played
 // twice in the same session.
-
+//
+// ONE reused element, not a fresh `new Audio()` per call — direct report from an iPad: the very
+// first country's name announced itself fine, every one after that stayed silent (the OTHER quiz
+// sounds kept working throughout, which points specifically at this file rather than at sound
+// being blocked outright — those go through sound.ts's Web Audio API instead, a separately-gated
+// mechanism). iOS Safari's autoplay permission for a `<audio>` element is tracked PER ELEMENT, not
+// once for the whole page: a brand-new element starts locked again every time, and QuizScreen's
+// automatic plays fire from a `setTimeout` (COUNTRY_AUDIO_AUTOPLAY_DELAY_MS) — not synchronously
+// inside a user gesture — so Safari silently refuses each one's `.play()`. The very first
+// question's clip apparently still lands (some leftover grace period right after the "Start quiz"
+// tap), but nothing after that stood a chance. Reusing a single element and unlocking it with a
+// real, synchronous play()/pause() round-trip inside actual gesture handlers (see
+// unlockCountryAudio, called from QuizScreen's answer/skip handlers) keeps THAT element permitted
+// for the rest of the session — changing its `src` and calling `.play()` again later, even from a
+// timer, keeps working once an element has been through one genuine gesture-triggered play.
 import { CountryDef } from '@worldly/engine';
 
 export type AudioVariant = 'en' | 'native';
+
+let sharedAudio: HTMLAudioElement | null = null;
+
+function getSharedAudio(): HTMLAudioElement | null {
+  if (typeof Audio === 'undefined') return null;
+  if (!sharedAudio) sharedAudio = new Audio();
+  return sharedAudio;
+}
 
 /** A country's name-pronunciation clip, bundled locally by `id` — see
  * public/audio/countries/SOURCE.md for provenance and how the id/variant → file mapping was
@@ -23,15 +45,51 @@ export function countryAudioSrc(country: CountryDef, variant: AudioVariant): str
   return `${import.meta.env.BASE_URL}audio/countries/${country.id}_${variant}.mp3`;
 }
 
-/** Plays a country's name in the given variant. Fails silently (caught, never thrown) if the
- * clip is missing or the browser blocks playback — exactly like playSound, this is purely
- * supplementary and never worth surfacing an error over. Every call already happens in response
- * to a user tap, so autoplay restrictions aren't a practical concern. */
-export function playCountryAudio(country: CountryDef, variant: AudioVariant): void {
+/** Spends a genuine, currently-in-progress user gesture to keep the shared element unlocked for
+ * iOS Safari's autoplay policy — call this SYNCHRONOUSLY from inside a real tap/click/submit
+ * handler, before anything that might play a clip on this element later via a timer (see
+ * QuizScreen's answer/skip handlers). Safe to call as often as you like: once an element has been
+ * through one successful gesture-triggered play, repeating this is a harmless no-op in practice.
+ * Never throws and never needs to be awaited — same "purely supplementary" stance as
+ * playCountryAudio below. */
+export function unlockCountryAudio(): void {
+  const audio = getSharedAudio();
+  if (!audio) return;
+  // Muted for this round-trip specifically — this element may already have a real clip loaded
+  // (whatever last played), and without this a rapid string of answers would produce an audible
+  // blip of that leftover clip on every tap, on top of the actual pronunciation that follows.
+  const wasMuted = audio.muted;
+  audio.muted = true;
+  const restore = () => {
+    audio.pause();
+    audio.muted = wasMuted;
+  };
   try {
-    const audio = new Audio(countryAudioSrc(country, variant));
+    const result = audio.play();
+    if (result && typeof result.then === 'function') {
+      result.then(restore).catch(restore);
+    } else {
+      restore();
+    }
+  } catch {
+    restore();
+  }
+}
+
+/** Plays a country's name in the given variant. Fails silently (caught, never thrown) if the
+ * clip is missing or the browser blocks playback — this is purely supplementary, never worth
+ * surfacing an error over. Reuses the same shared element every call (see the module doc comment
+ * above for why that matters specifically for iOS Safari's per-element autoplay lock), so a clip
+ * already playing when a new one starts is simply replaced by it, same as switching tracks on any
+ * single audio player. */
+export function playCountryAudio(country: CountryDef, variant: AudioVariant): void {
+  const audio = getSharedAudio();
+  if (!audio) return;
+  try {
+    audio.src = countryAudioSrc(country, variant);
+    audio.currentTime = 0;
     audio.play().catch(() => {});
   } catch {
-    // Audio construction itself failing (unsupported environment, etc.) — nothing to do.
+    // Playback itself failing (unsupported environment, etc.) — nothing to do.
   }
 }

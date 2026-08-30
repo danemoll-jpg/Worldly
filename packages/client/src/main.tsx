@@ -1,7 +1,10 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import { registerServiceWorker } from './lib/registerServiceWorker';
 import './styles/index.css';
+
+registerServiceWorker();
 
 // Belt-and-suspenders against native pinch-zoom, alongside body's touch-action: pan-x pan-y
 // (index.css) — that CSS property is the standards-based way to do this and should be sufficient

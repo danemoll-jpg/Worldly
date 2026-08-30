@@ -76,21 +76,31 @@ function getAudioContext(): AudioContext | null {
   return audioContext;
 }
 
-// One decode-in-flight (then decoded-forever) promise per cue, keyed so a rapid string of
-// answers before the first decode finishes all await the SAME fetch+decode instead of racing
-// duplicate requests. A rejected/failed promise (missing file, bad data) resolves to null rather
-// than staying rejected, so a bad cue doesn't turn into an unhandled rejection later.
+// One decode-in-flight (then decoded-forever, PROVIDED it actually succeeded) promise per cue,
+// keyed so a rapid string of answers before the first decode finishes all await the SAME
+// fetch+decode instead of racing duplicate requests.
 const bufferCache = new Map<SoundName, Promise<AudioBuffer | null>>();
 
 function bufferFor(name: SoundName, ctx: AudioContext): Promise<AudioBuffer | null> {
-  let promise = bufferCache.get(name);
-  if (!promise) {
-    promise = fetch(`${import.meta.env.BASE_URL}sounds/${SOUND_FILES[name]}`)
-      .then((res) => (res.ok ? res.arrayBuffer() : Promise.reject(new Error(`missing sound file: ${name}`))))
-      .then((data) => ctx.decodeAudioData(data))
-      .catch(() => null);
-    bufferCache.set(name, promise);
-  }
+  const cached = bufferCache.get(name);
+  if (cached) return cached;
+  const promise = fetch(`${import.meta.env.BASE_URL}sounds/${SOUND_FILES[name]}`)
+    .then((res) => (res.ok ? res.arrayBuffer() : Promise.reject(new Error(`missing sound file: ${name}`))))
+    .then((data) => ctx.decodeAudioData(data))
+    .catch(() => {
+      // A rejected/failed attempt (missing file, a network hiccup, bad data) resolves to null
+      // rather than staying rejected, so a bad cue doesn't turn into an unhandled rejection later
+      // — but it also has to come back OUT of the cache here, not stay in it: a Map entry is
+      // cached by reference to this specific (settled) promise, so leaving a null-resolved one in
+      // place would permanently silence this cue for the rest of the page's session the moment
+      // any ONE attempt failed, even from a purely transient blip — every future playSound(name)
+      // call would keep re-awaiting that same already-failed promise instead of trying the
+      // network again. Direct report of "the sounds are really inconsistent" traced to exactly
+      // this: one bad fetch early in a session, then that cue just never came back.
+      bufferCache.delete(name);
+      return null;
+    });
+  bufferCache.set(name, promise);
   return promise;
 }
 
