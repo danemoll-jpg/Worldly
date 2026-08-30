@@ -1,12 +1,13 @@
 # Sound effects
 
-Five short cues, played by `packages/client/src/lib/sound.ts` — see that file for exactly when
+Six short cues, played by `packages/client/src/lib/sound.ts` — see that file for exactly when
 each one fires. **None of the actual audio files are in this repo yet.** They're being created
 externally (ElevenLabs Studio's sound-effects generator) rather than sourced/licensed, so the app
 plays nothing (silently, no errors) until real files land here with these exact names:
 
 | Filename                    | Fires when…                                                          |
 | ---------------------------- | --------------------------------------------------------------------- |
+| `quiz-start.mp3`              | a quiz session begins — "Start quiz", "Play again", and the in-quiz "Restart" all funnel through the same `start()` (see useQuiz.ts/useGenericQuiz.ts), so this fires identically for all three |
 | `correct.mp3`                 | any answer is marked correct, in any of the three quizzes             |
 | `incorrect.mp3`               | any answer is marked wrong                                            |
 | `quiz-finish.mp3`             | a session completes — the default "ordinary" ending                   |
@@ -18,7 +19,16 @@ plays nothing (silently, no errors) until real files land here with these exact 
 Written to read as clean, modern, tasteful cues — explicitly NOT chiptune/8-bit/retro arcade
 register, since that's the one thing to avoid. `correct`/`incorrect` will play very often (every
 single answer), so both are deliberately short and low-fatigue rather than showy; the three
-"finish" cues escalate from modest to genuinely celebratory.
+"finish" cues escalate from modest to genuinely celebratory. `quiz-start` sits apart from that
+escalation — it's not a reward for anything, just a "here we go" cue, so it's written to feel
+anticipatory/inviting rather than triumphant (that register is saved for the finish cues, so
+starting a quiz doesn't already sound like finishing one).
+
+**`quiz-start.mp3`**
+> A short, upbeat "let's begin" cue — a light, quick ascending two- or three-note flourish on a
+> soft bell, marimba, or bright pluck synth, inviting and energetic but brief, more anticipation
+> than fanfare (this plays every time a quiz starts or restarts, not a reward moment). Clean,
+> modern production, no retro video-game beep, no chiptune. Under 1.5 seconds.
 
 **`correct.mp3`**
 > A short, bright, satisfying confirmation chime — a single crisp two-note upward ping on a soft
@@ -55,7 +65,8 @@ single answer), so both are deliberately short and low-fatigue rather than showy
 - Keep `correct`/`incorrect` genuinely short (well under a second) — they play on literally every
   question, so anything longer starts to feel like it's dragging on a quiz someone's moving
   through quickly.
-- Normalize loudness across all five so none jumps out louder than the others (sound.ts plays
-  every cue at the same fixed volume — it doesn't apply any per-clip gain).
+- Normalize loudness across all six so none jumps out louder than the others (sound.ts plays
+  every cue at the same fixed volume by default — `incorrect` alone gets an extra gain boost in
+  code, see sound.ts's SOUND_GAIN, so don't over-compensate for that one here).
 - Drop the finished files straight into this folder with the exact filenames above — no code
   changes needed on this end once they're in place.

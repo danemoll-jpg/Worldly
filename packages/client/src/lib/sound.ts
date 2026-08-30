@@ -17,9 +17,10 @@
 // or a browser's autoplay policy blocks it, so the app works fine whether or not the real sounds
 // are in place yet — a missing sound is exactly as silent as a muted one.
 
-export type SoundName = 'correct' | 'incorrect' | 'quizFinish' | 'quizFinishPerfect' | 'quizFinishRecord';
+export type SoundName = 'quizStart' | 'correct' | 'incorrect' | 'quizFinish' | 'quizFinishPerfect' | 'quizFinishRecord';
 
 const SOUND_FILES: Record<SoundName, string> = {
+  quizStart: 'quiz-start.mp3',
   correct: 'correct.mp3',
   incorrect: 'incorrect.mp3',
   quizFinish: 'quiz-finish.mp3',
@@ -38,6 +39,7 @@ const BASE_GAIN = 0.7;
  * just louder, that means its own recorded peaks are too close to full scale for this much extra
  * gain to stay clean — dial the number down rather than assuming the whole approach is broken. */
 const SOUND_GAIN: Record<SoundName, number> = {
+  quizStart: 1,
   correct: 1,
   incorrect: 2.5,
   quizFinish: 1,

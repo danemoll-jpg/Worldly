@@ -51,6 +51,7 @@ import {
   SyncExtras,
 } from '../network/sync';
 import { clearSyncCode, getSavedSyncCode, saveSyncCode } from '../network/syncSession';
+import { playSound } from '../lib/sound';
 import { useGenericQuiz } from './useGenericQuiz';
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
@@ -325,6 +326,7 @@ export function useQuiz() {
       setConfig(nextConfig);
       setSummary(null);
       setSession(startSession(nextConfig, COUNTRIES, stats));
+      playSound('quizStart');
     },
     [stats],
   );

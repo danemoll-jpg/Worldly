@@ -16,6 +16,7 @@ import {
   summarizeGenericSession,
 } from '@worldly/engine';
 import { genericPersonalBestFor, GenericSessionRecord, newSessionRecordId, PersonalBest } from '../lib/storage';
+import { playSound } from '../lib/sound';
 
 /** Shared session-management hook for the seas/oceans and US-states quizzes — the client-side
  * counterpart to genericSession.ts, same relationship useQuiz.ts has to session.ts, just scoped
@@ -44,6 +45,7 @@ export function useGenericQuiz<T extends GenericQuizItem>(
     setConfig({ mode, scope, category });
     setSession(startGenericSession(items, mode, scope, stats));
     setSummary(null);
+    playSound('quizStart');
   }
 
   function answer(ans: GenericAnswer) {
