@@ -57,6 +57,18 @@ export function QuizScreen({ session, onAnswer, onSkip, onQuit, onRestart, onOve
   // Freezing exactly what was on screen at pick-time sidesteps that race entirely.
   const [answeredChoice, setAnsweredChoice] = useState<{ options: CountryDef[]; correctId: string; pickedId: string } | null>(null);
   const seenResultCount = useRef(0);
+  // Holds the timer id for the pre-answer autoplay effect further down, so the answer/skip
+  // handlers can cancel it the instant a gesture happens — not just via that effect's own
+  // cleanup. Direct iPad report: rarely, the target's name played a second time right after
+  // answering. React's cleanup only runs once a re-render triggered by the answer actually
+  // commits (feedback/hasUnprocessedResult flipping) — an async hop through state batching and
+  // effect scheduling — while the raw setTimeout fires at its own precise deadline regardless. If
+  // an answer lands close enough to that 900ms mark, the timer can win the race and fire before
+  // React's cleanup gets to it, playing the country's name a beat after the tap that already
+  // "answered" it. Clearing it synchronously in the handler, in the same tick as the tap, removes
+  // the race entirely: a JS timer callback can never run in the middle of another synchronous
+  // function, so by the time onAnswer/onSkip below even starts, this has already won.
+  const pendingAutoplayTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Correctness per already-answered country this session — each country is asked at most
   // once, so this is a plain 1:1 map, not a running tally.
   const resultByCountry = useMemo(() => {
@@ -187,12 +199,21 @@ export function QuizScreen({ session, onAnswer, onSkip, onQuit, onRestart, onOve
     return country ? countryFlagSrc(country) : null;
   }
 
+  // Cancels the pre-answer autoplay timer (see pendingAutoplayTimer above) right now, synchronously
+  // — called first, before anything else, by every handler below.
+  function cancelPendingAutoplay() {
+    if (pendingAutoplayTimer.current === null) return;
+    clearTimeout(pendingAutoplayTimer.current);
+    pendingAutoplayTimer.current = null;
+  }
+
   // Every answer-submitting handler below spends its real, synchronous tap/click/submit gesture
   // to keep the shared country-audio element unlocked (see countryAudio.ts's unlockCountryAudio)
   // — both autoplay effects further down play a clip from a `setTimeout`, well after this gesture
   // has ended, which iOS Safari won't otherwise treat as user-initiated.
   function handleMapTap(feature: MapFeature) {
     if (!current || mode !== 'findIt' || !feature.quizzable || feedback) return;
+    cancelPendingAutoplay();
     unlockCountryAudio();
     onAnswer({ type: 'findIt', clickedCountryId: feature.id });
   }
@@ -200,24 +221,28 @@ export function QuizScreen({ session, onAnswer, onSkip, onQuit, onRestart, onOve
   function handleTypeSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!current || feedback || !typedAnswer.trim()) return;
+    cancelPendingAutoplay();
     unlockCountryAudio();
     onAnswer({ type: 'typeIt', submittedAnswer: typedAnswer });
   }
 
   function handleContinentPick(continent: Continent) {
     if (!current || feedback) return;
+    cancelPendingAutoplay();
     unlockCountryAudio();
     onAnswer({ type: 'continent', selectedContinent: continent });
   }
 
   function handleChoicePick(countryId: string) {
     if (!current || feedback) return;
+    cancelPendingAutoplay();
     unlockCountryAudio();
     setAnsweredChoice({ options: choices, correctId: current.country.id, pickedId: countryId });
     onAnswer({ type: 'findIt', clickedCountryId: countryId });
   }
 
   function handleSkip() {
+    cancelPendingAutoplay();
     unlockCountryAudio();
     onSkip();
   }
@@ -258,14 +283,24 @@ export function QuizScreen({ session, onAnswer, onSkip, onQuit, onRestart, onOve
   // question, a skip, a restart, or the feedback overlay for the PREVIOUS question clearing to
   // reveal this one underneath — but not on every unrelated re-render (hint reveals, typed input,
   // ...), since `feedback` is a stable `null` reference across those.
+  //
+  // The timer id also gets stashed in a ref (see pendingAutoplayTimer) so every answer/skip
+  // handler below can clearTimeout it SYNCHRONOUSLY, in the same tick as the tap — see that ref's
+  // comment for why this effect's own cleanup isn't enough on its own.
   useEffect(() => {
     if (feedback || hasUnprocessedResult || !current || !canListenBeforeAnswer) return;
     const country = current.country;
     const timer = setTimeout(() => playCountryAudio(country, 'en'), COUNTRY_AUDIO_AUTOPLAY_DELAY_MS);
+    pendingAutoplayTimer.current = timer;
     // Cancels a still-pending delayed play if the question changes (or the effect otherwise
     // re-runs) before it fires — e.g. skipping within the delay window shouldn't leave the SKIPPED
-    // country's name queued up to speak over the next one.
-    return () => clearTimeout(timer);
+    // country's name queued up to speak over the next one. Belt-and-suspenders with the handlers'
+    // own synchronous clearTimeout below: this one fires whenever React gets around to it, that
+    // one fires the instant the gesture happens.
+    return () => {
+      clearTimeout(timer);
+      if (pendingAutoplayTimer.current === timer) pendingAutoplayTimer.current = null;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current?.country.id, feedback, hasUnprocessedResult]);
 
