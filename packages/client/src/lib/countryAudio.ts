@@ -32,6 +32,21 @@ export type AudioVariant = 'en' | 'native';
 
 let sharedAudio: HTMLAudioElement | null = null;
 
+// Set the instant unlockCountryAudio makes its one genuine attempt (see that function) — never
+// reset, for the lifetime of the page. Guards against exactly what its own doc comment used to
+// claim was "a harmless no-op": calling the mute/play/pause round-trip again on every later
+// answer, even though the element was already unlocked, meant every single answer reached into
+// whatever clip the shared element currently held — including, sometimes, the real pronunciation
+// that had autoplayed for THIS question and might still be loading or mid-playback at that exact
+// moment (a slow connection, or a tap landing while the ~1s clip is still going). Direct report:
+// the target's name occasionally played a second time right after being answered, on top of every
+// earlier fix for the pre-answer timer race (see QuizScreen's pendingAutoplayTimer) — because none
+// of those touched this separate, unconditional call. There is nothing left for the round-trip to
+// do after the first successful gesture-triggered play (iOS Safari's unlock is per-element, not
+// per-call — see this module's doc comment), so skipping every later call removes the collision
+// entirely rather than trying to further narrow its timing.
+let unlocked = false;
+
 function getSharedAudio(): HTMLAudioElement | null {
   if (typeof Audio === 'undefined') return null;
   if (!sharedAudio) sharedAudio = new Audio();
@@ -48,11 +63,19 @@ export function countryAudioSrc(country: CountryDef, variant: AudioVariant): str
 /** Spends a genuine, currently-in-progress user gesture to keep the shared element unlocked for
  * iOS Safari's autoplay policy — call this SYNCHRONOUSLY from inside a real tap/click/submit
  * handler, before anything that might play a clip on this element later via a timer (see
- * QuizScreen's answer/skip handlers). Safe to call as often as you like: once an element has been
- * through one successful gesture-triggered play, repeating this is a harmless no-op in practice.
- * Never throws and never needs to be awaited — same "purely supplementary" stance as
- * playCountryAudio below. */
+ * QuizScreen's answer/skip handlers). Safe to call as often as you like — every call after the
+ * first is now a real no-op (see `unlocked` above), not just an intended-to-be-harmless one: once
+ * an element has been through one successful gesture-triggered play, it stays permitted for the
+ * rest of the session, so there's nothing left for a second round-trip to accomplish, only real
+ * clips left for it to collide with. Never throws and never needs to be awaited — same "purely
+ * supplementary" stance as playCountryAudio below. */
 export function unlockCountryAudio(): void {
+  if (unlocked) return;
+  // Set synchronously, before the actual play()/pause() round-trip below even starts (not in its
+  // `restore` callback once that resolves) — otherwise a second answer landing before the first
+  // round-trip's promise settles would fire a second overlapping attempt on top of it, the exact
+  // collision this flag exists to prevent.
+  unlocked = true;
   const audio = getSharedAudio();
   if (!audio) return;
   // Muted for this round-trip specifically — this element may already have a real clip loaded

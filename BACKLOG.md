@@ -39,23 +39,51 @@ just forgotten.
   `lib/countryAudio.ts` (`playCountryAudio`, independent of the sound-effects on/off toggle — a
   deliberate "listen" tap shouldn't be silenced by muting quiz dings). The browse/atlas screen
   (`LookupScreen.tsx`) gained 🔊 English / 🔊 Native buttons on the selected country's detail card.
-  The quiz screen (`QuizScreen.tsx`) autoplays the English pronunciation: before answering only
+  The quiz screen (`QuizScreen.tsx`) autoplays the English pronunciation before answering, only
   when the country's name is already shown as plain text (findIt+country mode, or continent
   mode — never for flag/capital-category or typeIt questions, where that would hand over the
-  answer), and after every answer once feedback reveals the identity regardless of mode/category.
-  A "🔊 Hear it" button stays in both places to replay it on demand.
+  answer). A "🔊 Hear it" button stays in both places to replay it on demand. (The automatic
+  replay after every answer, mentioned in an earlier version of this note, was removed — see (3)
+  below.)
 
-  Two refinements from live user feedback: (1) autoplay initially raced with `session.current`
-  advancing to the next question before the local `feedback` state caught up, so the pre-answer
-  effect could briefly play the WRONG (next) question's name right after answering — fixed using
-  the existing `seenResultCount` ref, read during render (before any effect mutates it), as a
-  synchronous "is there an unprocessed result" guard; verified via real network-request timestamps
-  before/after. (2) The autoplayed name was starting before the `quiz-start`/`correct`/`incorrect`
-  sound effect had finished, talking over it — fixed with a 900ms delay
-  (`COUNTRY_AUDIO_AUTOPLAY_DELAY_MS`) on both autoplay effects, each a cancellable `setTimeout` so
-  skipping/re-answering within that window can't leave a stale clip queued up; verified by
-  patching `window.Audio`/`fetch` in the live app to log `performance.now()` deltas (~900–1000ms
-  between the sound effect firing and the pronunciation starting).
+  Refinements from live user feedback, in order: (1) autoplay initially raced with
+  `session.current` advancing to the next question before the local `feedback` state caught up, so
+  the pre-answer effect could briefly play the WRONG (next) question's name right after answering
+  — fixed using the existing `seenResultCount` ref, read during render (before any effect mutates
+  it), as a synchronous "is there an unprocessed result" guard; verified via real network-request
+  timestamps before/after. (2) The autoplayed name was starting before the
+  `quiz-start`/`correct`/`incorrect` sound effect had finished, talking over it — fixed with a
+  900ms delay (`COUNTRY_AUDIO_AUTOPLAY_DELAY_MS`) on both autoplay effects, each a cancellable
+  `setTimeout` so skipping/re-answering within that window can't leave a stale clip queued up.
+  (3) Removed the automatic "say it again" replay after every answer (direct request — it was
+  getting noisy on every single answer); the manual "Hear it" button in the feedback view is the
+  only way to hear it again now. (4) Country audio only played for the first question on iOS
+  Safari — its per-element autoplay lock needs one real, synchronous, gesture-triggered play/pause
+  on the SAME element to stay unlocked for the rest of the session, so `countryAudio.ts` moved from
+  a fresh `new Audio()` per call to one shared element, unlocked via `unlockCountryAudio()` (a
+  muted play/pause round-trip) called from every answer/skip handler's real tap/click/submit
+  gesture. (5) A race in the pre-answer timer itself: it fires at its own precise 900ms deadline
+  regardless of when React gets around to running the effect's cleanup, so an answer landing close
+  to that mark could have the timer win and fire a beat after the tap that already "answered" the
+  question — fixed by stashing the timer id in a ref (`pendingAutoplayTimer`) and having every
+  handler cancel it synchronously, as the very first thing they do, before `onAnswer`/`onSkip` even
+  runs — a JS timer callback can never fire in the middle of another synchronous function, so this
+  removes the race rather than narrowing it. (6) Despite (5), a direct report that the name still
+  occasionally announced itself again right after being answered — correct or wrong, and not tied
+  to the 900ms mark (happened on countries whose clip had long since finished). Root cause was
+  unrelated to any timer race: `unlockCountryAudio()` from (4) ran its full muted play/pause
+  round-trip on the shared element on *every* answer/skip, not just the first — but iOS's
+  per-element unlock only needs to happen once, and calling `.play()` on an element again after its
+  clip had already ended restarts it from position 0 (standard `<audio>` behavior), so every answer
+  briefly replayed the just-heard clip from the start on the same element — muted, and so silent,
+  almost all the time (confirmed via live instrumentation logging every
+  `HTMLMediaElement.prototype.play`/`pause` call with its `muted`/`currentTime`/`ended` state and
+  `performance.now()` timestamp), but occasionally colliding audibly depending on exactly what the
+  shared element was doing at that instant (a still-loading fetch on a slow connection, a clip
+  still genuinely mid-playback when muting took effect). Fixed by tracking whether the element has
+  ever been successfully unlocked and making every call after the first a true no-op — there's
+  nothing left for a second round-trip to accomplish once unlocked, only a real clip left for it to
+  collide with.
 
 - **Quiz-start sound cue — shipped.** A sixth cue alongside correct/incorrect/quiz-finish(-perfect/
   -record) — see `lib/sound.ts`. Fires from the single `start()` in both `hooks/useQuiz.ts`
